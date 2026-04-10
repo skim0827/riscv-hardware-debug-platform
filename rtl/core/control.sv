@@ -18,10 +18,12 @@ module control(
     output alu_control_t ALUControl,
     output logic [1:0] ImmSrc,
 
-    // debug 
-    input logic dbg_halt,
-    input logic dbg_step
+    // Hart Interface  (from DM)
+    input  logic hart_halt_req,
+    input  logic hart_resume_req,
+    output logic hart_halted
 );
+
 import riscv_pkg::*;
 logic [1:0] ALUOp;
 logic Branch;
@@ -32,8 +34,9 @@ main_fsm u_fsm (
     .clk(clk),
     .rst_n(rst_n),
     .op(op),
-    .dbg_halt(dbg_halt),
-    .dbg_step(dbg_step),
+    .hart_halt_req(hart_halt_req),
+    .hart_resume_req(hart_resume_req),
+    .hart_halted(hart_halted),
     .Branch(Branch),
     .PCUpdate(PCUpdate),
     .RegWrite(RegWrite),

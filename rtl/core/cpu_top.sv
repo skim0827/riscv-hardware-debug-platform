@@ -3,22 +3,31 @@ module cpu(
     input logic clk, 
     input logic rst_n, 
 
-    // debug control
-    input logic dbg_halt,
-    input logic dbg_step,
+    // hart interface 
+    input  logic hart_halt_req,
+    input  logic hart_resume_req,
+    input  logic hart_reset_req, // for multi hart system 
+    output logic hart_halted,
 
-    // register access 
-    input  logic        dbg_reg_we,
-    input  logic [4:0]  dbg_reg_addr,
-    input  logic [31:0] dbg_reg_wdata,
-    output logic [31:0] dbg_reg_rdata,
+    input  logic [4:0]  hart_regfile_addr,
+    input  logic [31:0] hart_regfile_wdata,
+    input  logic        hart_regfile_we, 
+    output logic [31:0] hart_regfile_rdata,
 
-    // pc access 
-    input  logic        dbg_pc_we,
-    input  logic [31:0] dbg_pc_wdata,
-    output logic [31:0] dbg_pc_rdata
+    input  logic [31:0] hart_pc_wdata,
+    input  logic        hart_pc_we,
+    output logic [31:0] hart_pc_rdata,
+
+    // program buffer interface 
+    input  logic [31:0] progbuf_instr, 
+    input  logic        progbuf_exec,
+    output logic        progbuf_done,
+    output logic        progbuf_exception
 );
+
+
 // control signals 
+// ==================================================================
 logic [31:0] PCNext, pc;
 logic PCWrite, RegWrite, MemWrite, IRWrite, AdrSrc, Zero; 
 logic [1:0] ResultSrc, ALUSrcB, ALUSrcA, ImmSrc;
@@ -30,7 +39,8 @@ logic [6:0] funct7;
 assign op     = instruction[6:0];
 assign funct3 = instruction[14:12];
 assign funct7 = instruction[31:25];
-// debug interface (will add soon)
+
+
 
 control u_control(
     .clk(clk),
@@ -39,6 +49,7 @@ control u_control(
     .op(op),
     .funct3(funct3),
     .funct7_5(funct7[5]),
+
     .PCWrite(PCWrite),
     .RegWrite(RegWrite),
     .MemWrite(MemWrite),
@@ -49,11 +60,14 @@ control u_control(
     .AdrSrc(AdrSrc),
     .ALUControl(ALUControl),
     .ImmSrc(ImmSrc),
-    .dbg_halt(dbg_halt),
-    .dbg_step(dbg_step)
+
+    .hart_halt_req(hart_halt_req),
+    .hart_resume_req(hart_resume_req),
+    .hart_halted(hart_halted)
 );
 
 // datapath wires 
+// ==================================================================
 logic [31:0] mem_addr;
 logic [31:0] mem_wdata;
 assign mem_wdata = register_b_in;
@@ -69,13 +83,13 @@ logic [31:0] ImmExt;
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) 
         instruction <= 32'b0;
-    else if (IRWrite) 
-        instruction <= mem_rdata;
-
+    else if (progbuf_exec) instruction <= progbuf_instr;
+    else if (IRWrite) instruction <= mem_rdata;
 end 
 
 
 // Architectural pipeline registers
+// ==================================================================
 logic [31:0] register_a_in;             // Holds RD1 data (read from regfile)
 logic [31:0] register_b_in;             // Holds RD2 data (read from regfile)
 logic [31:0] alu_result_reg;            // Holds ALU output
@@ -95,6 +109,8 @@ always_ff @(posedge clk or negedge rst_n) begin
     end 
 end 
 
+
+
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin 
         alu_result_reg <= 32'b0;
@@ -102,12 +118,18 @@ always_ff @(posedge clk or negedge rst_n) begin
         alu_result_reg <= ALUResult;
     end 
 end
+
+
+
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n)
         mem_data_reg <= 32'b0;
     else
         mem_data_reg <= mem_rdata;
 end
+
+
+
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n)
         pc_old <= 32'b0;
@@ -115,7 +137,10 @@ always_ff @(posedge clk or negedge rst_n) begin
         pc_old <= pc;
 end
 
+
+
 // combinational mux 
+// ==================================================================
 assign mem_addr = AdrSrc ? alu_result_reg : pc;
 assign PCNext = ALUResult;
 
@@ -130,7 +155,9 @@ assign writeback_data = (ResultSrc == 2'b00) ? alu_result_reg :
                         (ResultSrc == 2'b01) ? mem_data_reg : 
                                                ALUResult;
 
-// module instantiations 
+
+// ==================================================================
+
 memory#(
     .mem_init("../tb/test_memory.hex")
 ) u_memory (
@@ -147,9 +174,10 @@ program_counter u_pc (
     .rst_n(rst_n),
     .PCNext(PCNext),
     .PCWrite(PCWrite),
-    .dbg_pc_we(dbg_pc_we),
-    .dbg_pc_wdata(dbg_pc_wdata),
-    .dbg_pc_rdata(dbg_pc_rdata),
+
+    .hart_pc_we(hart_pc_we),
+    .hart_pc_wdata(hart_pc_wdata),
+    .hart_pc_rdata(hart_pc_rdata),
     .pc(pc)
 );
 
@@ -170,17 +198,37 @@ alu u_alu (
 regfile u_regfile(
     .clk(clk),
     .rst_n(rst_n),
+
     .a1(instruction[19:15]),
     .a2(instruction[24:20]),
     .a3(instruction[11:7]),
     .wd3(writeback_data),
     .we3(RegWrite),
-    .dbg_reg_we(dbg_reg_we),
-    .dbg_reg_addr(dbg_reg_addr),
-    .dbg_wdata(dbg_wdata),
+
+    .hart_regfile_we(hart_regfile_we),
+    .hart_regfile_addr(hart_regfile_addr),
+    .hart_regfile_wdata(hart_regfile_wdata),
     .rd1(rd1),
     .rd2(rd2),
-    .dbg_rdata(dbg_rdata)
+    .hart_regfile_rdata(hart_regfile_rdata)
 );
+
+
+
+// programme buffer 
+// ==================================================================
+logic progbuf_exec_d; // to track execution of prog buffer 
+
+always_ff @(posedge clk or negedge rst_n) begin 
+    if (!rst_n) begin 
+        progbuf_exec_d <= 1'b0;
+        progbuf_done   <= 1'b0;
+    end else begin 
+        progbuf_exec_d <= progbuf_exec; 
+        progbuf_done   <= progbuf_exec_d; // one cycle ater execution, progbuf is done !
+    end 
+end 
+
+assign progbuf_exception = 1'b0; // need to change 
 
 endmodule 
