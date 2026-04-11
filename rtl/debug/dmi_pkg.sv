@@ -1,10 +1,10 @@
 // RISC-V Debug Module Interface (DMI) Package v0.13.2
 
 package dmi_pkg;
-    // DMI REGISTER ADDRESSES (7-bit) pg 20
+    // DMI REGISTER ADDRESSES (7-bit) table 3.8
     // Status registers
-    localparam [6:0] DMI_DMSTATUS   = 7'h11;
     localparam [6:0] DMI_DMCONTROL  = 7'h10;
+    localparam [6:0] DMI_DMSTATUS   = 7'h11;
     localparam [6:0] DMI_HARTINFO   = 7'h12;
     // Abstract command registers
     localparam [6:0] DMI_ABSTRACTCS = 7'h16;
@@ -78,10 +78,11 @@ package dmi_pkg;
         logic         resumereq;      
         logic         hartreset;   
         logic         ackhavereset;   
-        logic [27:20] reserved1;   
-        logic         hasel;         
-        logic [18:5]  hartsel;       
-        logic [4:2]   reserved2;     
+        logic         reserved1;   
+        logic         hasel;    
+        logic [25:16] hartsello;     
+        logic [15:6]  hartselhi;       
+        logic [5:4]   reserved2;     
         logic         setresethaltreq;   
         logic         clrresethaltreq;   
         logic         ndmreset;      
@@ -90,32 +91,32 @@ package dmi_pkg;
 
     // ABSTRACTCS REGISTER (0x16) - ABSTRACT COMMAND STATUS (READ/WRITE) pg 27
     typedef struct packed {
-        logic [31:29] progbufsize;    
-        logic [28:13] reserved1;      
-        logic         busy;          
-        logic         reserved2;     
+        logic [31:29] reserved1;    
+        logic [28:24] progbufsize;      
+        logic [23:13] reserved2;          
+        logic         busy;     
+        logic         reserved3;
         logic [10:8]  cmderr;        
-        logic [7:4]   reserved3;     
+        logic [7:4]   reserved4;     
         logic [3:0]   datacount;     
     } abstractcs_t;
 
     // COMMAND REGISTER (0x17) - EXECUTE ABSTRACT COMMAND (WRITE ONLY) pg28
     typedef struct packed {
-        logic [31:24] cmdtype;       // [31:24] Command type
-        logic [23:0]  control;       // [23:0] Command-specific control bits
+        logic [31:24] cmdtype;        
+        logic [23:0]  control;      
     } command_t;
 
     // Subtype for Access Register command (cmdtype = 0x00) pg 13
     typedef struct packed {
         logic [31:24] cmdtype;        
-        logic [23:20] reserved1;      
-        logic [19:17] aarsize;        
+        logic         reserved1;      
+        logic [22:20] aarsize;        
         logic         aarpostincrement; 
         logic         postexec;       
         logic         transfer;       
-        logic         write;          
-        logic [12:0]  reserved2;      
-        logic [4:0]   regno;          // simplified implementation; in the spec 16 bits
+        logic         write;              
+        logic [15:0]  regno;          
     } cmd_access_register_t;
 
     // REGISTER NUMBERS (for Access Register command) pg 13
@@ -144,7 +145,7 @@ package dmi_pkg;
     localparam [3:0] DMSTATUS_VERSION_0_11 = 4'h1;
     localparam [3:0] DMSTATUS_VERSION_0_13 = 4'h2;
 
-    // Abstract command error codes pg 27 
+    // Abstract command error codes 28 pg 
     typedef enum logic [2:0] {
         CMDERR_NONE = 3'h0,         
         CMDERR_BUSY = 3'h1,        
