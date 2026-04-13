@@ -107,7 +107,7 @@ dtm_top #(
     // JTAG interface 
     .tck(tck), 
     .tdi(tdi), 
-    .tdo,
+    .tdo(tdo),
 
     // JTAG TAP 
     .capture_ir(capture_ir),
