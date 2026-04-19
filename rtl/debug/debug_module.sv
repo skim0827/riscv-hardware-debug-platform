@@ -54,12 +54,13 @@ logic [31:0]    data_regs[0:11];
 // ======================================================================
 typedef enum logic [3:0] { 
     CMD_IDLE        = 4'h0, 
-    CMD_START       = 4'h1,
-    CMD_TRANSFER    = 4'h2, // transferring data to/from hart 
-    CMD_PROGBUF     = 4'h3, // only if postexe = 1
-    CMD_WAIT_HART   = 4'h4, // waiting for hart to complete 
-    CMD_DONE        = 4'h5, 
-    CMD_ERROR       = 4'h6
+    CMD_DECODE      = 4'h1,   // validate cmd + confirm hart halted
+    CMD_REG_SETUP   = 4'h2,   // drive addr, let comb read settle
+    CMD_REG_SAMPLE  = 4'h3,   // capture rdata (reads)
+    CMD_REG_WRITE   = 4'h4,   // pulse we (writes)
+    CMD_PROGBUF     = 4'h5,   // wait for pb_done event
+    CMD_DONE        = 4'h6, 
+    CMD_ERROR       = 4'h7
 } cmd_state_t;
 
 cmd_state_t cmd_state, cmd_state_next; 
@@ -165,7 +166,7 @@ end
 // Comb logic - command decoding table 4.1
 // ======================================================================
 always_comb begin : decode_command
-    cmd_access_reg = command_reg;
+    // cmd_access_reg = command_reg;
     gpr_addr = cmd_access_reg.regno[4:0];
     // (Spec Table 3.3)
     is_gpr_access = (cmd_access_reg.regno >= 16'h1000) && 
@@ -183,57 +184,77 @@ always_comb begin : cmd_state_fsm
 
     case (cmd_state) 
         CMD_IDLE : begin 
+            if (dmi_valid && dmi_we && dmi_addr == DMI_COMMAND && !abstractcs_reg.busy)
+                cmd_state_next = CMD_DECODE;
         end 
 
-        CMD_START : begin 
-            case (cmd_access_reg.cmdtype)
-                8'h00 : cmd_state_next      = CMD_TRANSFER;  // access register
-                default : cmd_state_next    = CMD_ERROR;   // for now unsuported 
-            endcase
+        CMD_DECODE : begin 
+            // Event: hart must be halted before any register access
+            if (!hart_halted) begin
+                cmd_state_next = CMD_DECODE;
+            end else begin
+                case (cmd_access_reg.cmdtype)
+                    8'h00 : begin  // access register
+                        if (!cmd_access_reg.transfer) begin
+                            // transfer=0: skip reg access entirely
+                            cmd_state_next = cmd_access_reg.postexec ? CMD_PROGBUF : CMD_DONE;
+                        end else begin
+                            cmd_state_next = CMD_REG_SETUP;
+                        end
+                    end
+                    default : cmd_state_next = CMD_ERROR;
+                endcase
+            end
         end 
 
-        CMD_TRANSFER: begin
-            if (cmd_access_reg.postexec) cmd_state_next = CMD_PROGBUF; 
-            else cmd_state_next                         = CMD_DONE;
+        CMD_REG_SETUP : begin
+            cmd_state_next = cmd_access_reg.write ? CMD_REG_WRITE : CMD_REG_SAMPLE;
+        end
+
+        CMD_REG_SAMPLE : begin
+            cmd_state_next = cmd_access_reg.postexec ? CMD_PROGBUF : CMD_DONE;
+        end
+
+        CMD_REG_WRITE : begin
+            cmd_state_next = cmd_access_reg.postexec ? CMD_PROGBUF : CMD_DONE;
         end
 
         CMD_PROGBUF : begin 
-            if (pb_done) begin 
-                if (pb_exception) cmd_state_next = CMD_ERROR; 
-                else cmd_state_next = CMD_DONE;
-            end
+            if (pb_done)
+                cmd_state_next = pb_exception ? CMD_ERROR : CMD_DONE;
         end  
 
-        CMD_DONE : cmd_state_next = CMD_IDLE;
+        CMD_DONE  : cmd_state_next = CMD_IDLE;
         CMD_ERROR : cmd_state_next = CMD_IDLE;
-        default : cmd_state_next = CMD_IDLE;
+        default   : cmd_state_next = CMD_IDLE;
     endcase
-end 
+end
 
 // ======================================================================
 // Comb logic - Hart interface control 
 // ======================================================================
 always_comb begin : hart_control 
-    hart_regfile_we     = 1'b0;
-    hart_regfile_addr   = 5'h0;
-    hart_regfile_wdata  = 32'h0;
-    hart_pc_we          = 1'b0;
-    hart_pc_wdata       = 32'h0;
+    hart_regfile_we    = 1'b0;
+    hart_regfile_addr  = 5'h0;
+    hart_regfile_wdata = 32'h0;
+    hart_pc_we         = 1'b0;
+    hart_pc_wdata      = 32'h0;
 
-    // Register access during CMD_TRANSFER 
-    if (abstractcs_reg.busy && cmd_state == CMD_TRANSFER) begin 
-        if (cmd_access_reg.transfer) begin   
-            hart_regfile_addr = gpr_addr;
+    if (is_gpr_access) begin
+        // Always drive addr so comb read is valid during CMD_REG_SETUP/SAMPLE
+        hart_regfile_addr = gpr_addr;
 
-            if (cmd_access_reg.write) begin 
-                hart_regfile_we = 1'b1;
-                hart_regfile_wdata = data_regs[0];
-
-            end 
-        end 
-    end 
+        if (cmd_state == CMD_REG_WRITE) begin
+            hart_regfile_we    = 1'b1;
+            hart_regfile_wdata = data_regs[0];
+        end
+    end else if (is_pc_access) begin
+        if (cmd_state == CMD_REG_WRITE) begin
+            hart_pc_we    = 1'b1;
+            hart_pc_wdata = data_regs[0];
+        end
+    end
 end
-
 // ======================================================================
 // Comb logic - program buffer control 
 // ======================================================================
@@ -283,6 +304,9 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
             abstractcs_reg.busy     <= 1'b0;
             command_reg             <= 32'h0;
 
+            hart_halt_req           <= 1'b0;  
+            hart_resume_req         <= 1'b0;     
+            hart_reset_req          <= 1'b0; 
             
             hart_halted_r           <= 1'b0;
             hart_halted_sticky      <= 1'b0;
@@ -344,9 +368,10 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
 
             end else begin 
                 command_reg             <= dmi_wdata;
+                cmd_access_reg          <= dmi_wdata;
                 abstractcs_reg.busy     <= 1'b1;
                 abstractcs_reg.cmderr   <= CMDERR_NONE;
-                cmd_state               <= CMD_START;
+                
             end 
         end
         // ================================================================
@@ -380,19 +405,27 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
         // ================================================================
         cmd_state <= cmd_state_next;
 
-        if (cmd_state == CMD_TRANSFER && cmd_access_reg.transfer && !cmd_access_reg.write && abstractcs_reg.busy) begin 
-            if (is_gpr_access) data_regs[0]     <= hart_regfile_rdata;
-            else if (is_pc_access) data_regs[0] <= hart_pc_rdata;
-        end 
+        // Inside the always_ff block, replace the old CMD_WAIT_HART read:
+        if (cmd_state == CMD_REG_SAMPLE && !cmd_access_reg.write) begin
+            if (is_gpr_access)
+                data_regs[0] <= hart_regfile_rdata;
+            else if (is_pc_access)
+                data_regs[0] <= hart_pc_rdata;
+        end
 
 
-        if (cmd_state == CMD_DONE || cmd_state == CMD_ERROR) begin 
+        // busy / error tracking stays the same, just update state names:
+        if (cmd_state == CMD_DONE || cmd_state == CMD_ERROR)
             abstractcs_reg.busy <= 1'b0;
-        end 
 
-        if (cmd_state == CMD_ERROR) begin 
+        if (cmd_state == CMD_ERROR)
             abstractcs_reg.cmderr <= CMDERR_NOT_SUPPORTED;
-        end 
+
+ 
+        // In the sequential block, replace the commented $display:
+        // $display("[DM] clk=%0t state=%s hart_halted=%0b is_gpr=%0b gpr_addr=%0h rdata=%0h data0=%0h",
+        //     $time, cmd_state.name(), hart_halted, is_gpr_access, 
+        //     gpr_addr, hart_regfile_rdata, data_regs[0]);
      end
 end 
 endmodule
