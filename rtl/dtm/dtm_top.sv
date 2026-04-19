@@ -59,10 +59,9 @@ localparam logic [4:0] IR_DTMCS     = 5'h10;
 localparam logic [4:0] IR_DMI       = 5'h11;
 localparam logic [4:0] IR_BYPASS    = 5'h1f;
 localparam logic [31:0] IDCODE_VALUE = 32'h12345678; // placeholder 
-
+// ========================================================================
 // registers 
 // ========================================================================
-// Instruction register 
 logic [4:0] ir_data;
 logic [4:0] ir_parallel_in;
 
@@ -80,6 +79,7 @@ logic tdo_internal;
 // decoded IR instruction 
 logic select_idcode, select_dtmcs, select_dmi, select_bypass;
 
+// ========================================================================
 // DMI STATE 
 // ========================================================================
 typedef enum logic [1:0] {
@@ -111,6 +111,8 @@ always_comb begin : instr_decode
     endcase 
 end 
 
+
+// ========================================================================
 // IR : capture shift and update 
 // ========================================================================
 always_ff @(posedge tck) begin : ir_shift_register 
@@ -121,6 +123,7 @@ end
 
 assign ir_tdo = ir_data[0]; // LSB 
 
+// ========================================================================
 // Data Reg - IDCODE 
 // ========================================================================
 always_ff @(posedge tck) begin : idcode_register
@@ -129,6 +132,7 @@ always_ff @(posedge tck) begin : idcode_register
     // where is update ???  i don't understand this behaviour
 end 
 
+// ========================================================================
 // Data Reg - DTMCS 
 // ========================================================================
 always_ff @(posedge tck) begin : dtmcs_register 
@@ -138,15 +142,16 @@ always_ff @(posedge tck) begin : dtmcs_register
             14'b0, 
             dtmcs_dmihardreset, 
             dtmcs_dmireset, 
+            1'b0,
             dtmcs_idle, 
             dtmcs_dmistat,
             dtmcs_abits,
-            5'h1 // version 0.13
+            4'h1 // version 0.13
         };
     end else if (shift_dr && select_dtmcs) dtmcs_dr_data <= {tdi, dtmcs_dr_data[31:1]};
 end 
 
-
+// ========================================================================
 // Data Reg - DMI regs 
 // ========================================================================
 always_ff @(posedge tck) begin : dmi_register 
@@ -160,9 +165,13 @@ always_ff @(posedge tck) begin : dmi_register
     end else if (shift_dr && select_dmi) dmi_dr_data <= {tdi, dmi_dr_data[40:1]};
 end 
 
+always_ff @(posedge tck) begin 
+    dmi_we      <= update_dr && select_dmi && (dmi_dr_data[1:0] == 2'b10); // pg 66 
+    dmi_re      <= update_dr && select_dmi && (dmi_dr_data[1:0] == 2'b01);
+    dmi_wdata   <= dmi_dr_data[33:2];
+    dmi_addr    <= dmi_dr_data[40:34];
+end 
 
-assign dmi_re = update_dr && select_dmi && (dmi_dr_data[1:0] == 2'b01); // pg 66 
-assign dmi_we = update_dr && select_dmi && (dmi_dr_data[1:0] == 2'b10);
 
 // BYPASS regs 
 // ========================================================================
@@ -171,6 +180,8 @@ always_ff @(posedge tck) begin : bypass_register
     else if (shift_dr && select_bypass) bypass_reg <= tdi; 
 end 
 
+
+// ========================================================================
 // TDO mux : priority IR shift - selected DR - BYPASS 
 // ========================================================================
 always_comb begin : tdo_mux 
@@ -184,9 +195,11 @@ always_comb begin : tdo_mux
     end else tdo_internal = 1'bx; // undefined outside shift phase 
 end 
 
-assign tdo = tdo_internal;
+always_ff @(posedge tck) begin 
+    tdo <= tdo_internal; // Delayed by half clock
+end 
 
-
+// ========================================================================
 // Control signal 
 // ========================================================================
 always_ff @(posedge tck) begin : control_outputs 
