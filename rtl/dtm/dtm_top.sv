@@ -93,7 +93,7 @@ dmi_op_t dmi_op, dmi_op_next;
 
 // IR capture value 
 assign ir_parallel_in = 5'b00001; // 0x01 ???
-
+// ========================================================================
 // Instruction decoder 
 // ========================================================================
 always_comb begin : instr_decode 

@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
-module control(
+module control
+import riscv_pkg::*;
+(
     input logic clk,
     input logic rst_n,
     input logic Zero,
@@ -7,10 +9,10 @@ module control(
     input logic [2:0] funct3,
     input logic funct7_5,
 
-    output logic PCWrite, 
     output logic RegWrite, 
     output logic MemWrite, 
     output logic IRWrite, 
+    output logic PCWrite,
     output logic [1:0] ResultSrc,
     output logic [1:0] ALUSrcB, 
     output logic [1:0] ALUSrcA,
@@ -21,10 +23,14 @@ module control(
     // Hart Interface  (from DM)
     input  logic hart_halt_req,
     input  logic hart_resume_req,
-    output logic hart_halted
+    output logic hart_halted,
+
+    // Progbuf interface
+    input  logic progbuf_exec,
+    output logic progbuf_done
 );
 
-import riscv_pkg::*;
+
 logic [1:0] ALUOp;
 logic Branch;
 logic PCUpdate;
@@ -37,6 +43,8 @@ main_fsm u_fsm (
     .hart_halt_req(hart_halt_req),
     .hart_resume_req(hart_resume_req),
     .hart_halted(hart_halted),
+    .progbuf_exec(progbuf_exec),
+    .progbuf_done(progbuf_done),
     .Branch(Branch),
     .PCUpdate(PCUpdate),
     .RegWrite(RegWrite),

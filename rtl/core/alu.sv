@@ -14,6 +14,7 @@ always_comb begin
         ALU_SUB : ALUResult = srcA - srcB;
         ALU_OR : ALUResult = srcA | srcB; 
         ALU_AND : ALUResult = srcA & srcB; // and 
+        ALU_SLT : ALUResult = ($signed(srcA) < $signed(srcB)) ? 32'b1 : 32'b0; // slt
         default : ALUResult = srcA + srcB;
     endcase 
 end

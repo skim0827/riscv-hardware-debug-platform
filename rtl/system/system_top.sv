@@ -34,56 +34,79 @@ module system_top(
     input logic tdi,
     output logic tdo
 );
+
 import dmi_pkg::*;
 import riscv_pkg::*;
-
-// Internal Signals 
-// =========================================================================
-
-
-// TAP to DTM
-logic capture_dr, shift_dr, update_dr; 
+// ============================================================================
+// TAP control signals  (tck domain)
+// ============================================================================
+logic capture_dr, shift_dr, update_dr;
 logic capture_ir, shift_ir, update_ir;
-logic cmd_valid;
 
+// ============================================================================
+// DMI bus — TCK domain  (DTM outputs)
+// ============================================================================
+logic [6:0]  tck_dmi_addr;
+logic [31:0] tck_dmi_wdata;
+logic        tck_dmi_we;
+logic        tck_dmi_re;
+logic [31:0] tck_dmi_rdata;   // DM → DTM (synchronised back to tck)
 
-// DTM to DM 
-logic [6:0]  dmi_addr; 
-logic [31:0] dmi_wdata; 
-logic        dmi_we;
-logic        dmi_re; 
-logic [31:0] dmi_rdata; 
-logic        dmi_valid; 
+// ============================================================================
+// DMI bus — CLK domain  (DM inputs, from bridge)
+// ============================================================================
+logic [6:0]  clk_dmi_addr;
+logic [31:0] clk_dmi_wdata;
+logic [1:0]  clk_dmi_op;
+logic        clk_dmi_we;
+logic        clk_dmi_re;
+logic        clk_dmi_valid;
+logic [31:0] clk_dmi_rdata;   // DM output, fed back through bridge
 
-// DTM Control (section 6.1.4)
+// ============================================================================
+// DTMCS feedback  (tck domain, driven by DTM parameters)
+// TODO: drive dtmcs_dmistat from DM busy/error status once DM exposes it
+// ============================================================================
 logic        dtmcs_dmihardreset; 
 logic        dtmcs_dmireset; 
 logic [2:0]  dtmcs_idle;
 logic [1:0]  dtmcs_dmistat; 
-logic [5:0]  dtmcs_abits;
+logic [5:0]  dtmcs_abits; 
 
-// DM to CPU (hart interface)
-logic hart_halted; 
-logic hart_halt_req; 
-logic hart_resume_req;
-logic hart_reset_req; 
+assign dtmcs_idle    = 3'b001;   // 1 run-test/idle cycle between accesses
+assign dtmcs_dmistat = 2'b00;    // no error — placeholder until DM drives this
+assign dtmcs_abits   = 6'd7;     // 7-bit address field
 
-logic [31:0] hart_regfile_rdata; 
-logic [31:0] hart_regfile_wdata; 
+// ============================================================================
+// Hart interface  (clk domain)
+// ============================================================================
+
+logic        hart_halted;
+logic        hart_halt_req;
+logic        hart_resume_req;
+logic        hart_reset_req;
+
+logic [31:0] hart_regfile_rdata;
+logic [31:0] hart_regfile_wdata;
 logic [4:0]  hart_regfile_addr;
 logic        hart_regfile_we;
 
+logic [31:0] hart_pc_rdata;
+logic [31:0] hart_pc_wdata;
+logic        hart_pc_we;
 
-logic        hart_pc_we; 
-logic [31:0] hart_pc_rdata; 
-logic [31:0]  hart_pc_wdata;
+// ============================================================================
+// Program buffer interface  (clk domain)
+// ============================================================================
+logic [31:0] progbuf_instr;
+logic        progbuf_exec;
+logic        progbuf_done;
+logic        progbuf_exception;
 
 
-logic [31:0] progbuf_instr; 
-logic        progbuf_exec; 
-logic        progbuf_done; 
-logic        progbuf_exception; 
-
+// ============================================================================
+// TAP FSM
+// ============================================================================
 tap_fsm tap_controller(
     .tck(tck),
     .tms(tms),
@@ -97,7 +120,9 @@ tap_fsm tap_controller(
     .update_dr(update_dr)
 );
 
-
+// ============================================================================
+// DTM  (tck domain)
+// ============================================================================
 dtm_top #(
     .WIDTH(32),
     .DTMCS_WIDTH(32),
@@ -118,11 +143,11 @@ dtm_top #(
     .update_dr(update_dr), 
 
     // DMI Bus 
-    .dmi_addr(dmi_addr), 
-    .dmi_wdata(dmi_wdata),
-    .dmi_we(dmi_we),
-    .dmi_re(dmi_re), 
-    .dmi_rdata(dmi_rdata),
+    .dmi_addr(tck_dmi_addr), 
+    .dmi_wdata(tck_dmi_wdata),
+    .dmi_we(tck_dmi_we),
+    .dmi_re(tck_dmi_re), 
+    .dmi_rdata(tck_dmi_rdata), // synchronised return value
 
     // DTMCS (section 6.1.4)
     .dtmcs_dmihardreset(dtmcs_dmihardreset), 
@@ -132,24 +157,47 @@ dtm_top #(
     .dtmcs_abits(dtmcs_abits)
 );
 
-// constant DTM parameters - this should be driven by DM in final design  ???
-assign dtmcs_idle    = 3'b000; 
-assign dtmcs_dmistat = 2'b00;
-assign dtmcs_abits   = 6'd7;
+// ============================================================================
+// DMI CDC bridge  (tck ↔ clk)
+// ============================================================================
+dmi_cdc_bridge cdc_bridge (
+    .tck            (tck),
+    .clk            (clk),
+    .rst_n          (rst_n),
 
-assign dmi_valid = dmi_we | dmi_re; // what about neither read or write such as progbuf ? 
+    // TCK side (from DTM)
+    .tck_dmi_addr   (tck_dmi_addr),
+    .tck_dmi_wdata  (tck_dmi_wdata),
+    .tck_dmi_we     (tck_dmi_we),
+    .tck_dmi_re     (tck_dmi_re),
+    .tck_dmi_rdata  (tck_dmi_rdata),   // back to DTM
+
+    // CLK side (to DM)
+    .clk_dmi_addr   (clk_dmi_addr),
+    .clk_dmi_wdata  (clk_dmi_wdata),
+    .clk_dmi_op     (clk_dmi_op),
+    .clk_dmi_we     (clk_dmi_we),
+    .clk_dmi_re     (clk_dmi_re),
+    .clk_dmi_valid  (clk_dmi_valid),
+    .clk_dmi_rdata  (clk_dmi_rdata)    // from DM
+);
+
+
+
+// ============================================================================
+// Debug Module  (clk domain)
+// ============================================================================
 
 debug_module dm (
-
     .clk(clk),
     .rst_n(rst_n),
     
-    .dmi_addr(dmi_addr),
-    .dmi_wdata(dmi_wdata),
-    .dmi_we(dmi_we),
-    .dmi_re(dmi_re), 
-    .dmi_rdata(dmi_rdata),
-    .dmi_valid(dmi_valid),
+    .dmi_addr(clk_dmi_addr),
+    .dmi_wdata(clk_dmi_wdata),
+    .dmi_we(clk_dmi_we),
+    .dmi_re(clk_dmi_re), 
+    .dmi_rdata(clk_dmi_rdata),
+    .dmi_valid(clk_dmi_valid),
 
 
     // Hart Interface (to CPU Core)    
@@ -166,7 +214,7 @@ debug_module dm (
 
     .hart_pc_rdata(hart_pc_rdata),
     .hart_pc_wdata(hart_pc_wdata),
-    .hart_pc_we(hart_pc_we), // ?? hart pc re ?? we don't need this ? 
+    .hart_pc_we(hart_pc_we), 
 
     .progbuf_instr(progbuf_instr),
     .progbuf_exec(progbuf_exec),
@@ -174,7 +222,9 @@ debug_module dm (
     .progbuf_exception(progbuf_exception)
 );
 
-
+// ============================================================================
+// CPU core  (clk domain)
+// ============================================================================
 cpu cpu_core (
     .clk(clk), 
     .rst_n(rst_n), 

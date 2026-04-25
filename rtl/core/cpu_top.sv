@@ -25,17 +25,20 @@ module cpu(
     output logic        progbuf_exception
 );
 
-
+// ==================================================================
 // control signals 
 // ==================================================================
 logic [31:0] PCNext, pc;
 logic PCWrite, RegWrite, MemWrite, IRWrite, AdrSrc, Zero; 
 logic [1:0] ResultSrc, ALUSrcB, ALUSrcA, ImmSrc;
+logic Branch;
+logic PCUpdate;
 alu_control_t ALUControl;
 logic [31:0] instruction; 
 logic [6:0] op;
 logic [2:0] funct3;
 logic [6:0] funct7;
+
 assign op     = instruction[6:0];
 assign funct3 = instruction[14:12];
 assign funct7 = instruction[31:25];
@@ -50,10 +53,10 @@ control u_control(
     .funct3(funct3),
     .funct7_5(funct7[5]),
 
-    .PCWrite(PCWrite),
     .RegWrite(RegWrite),
     .MemWrite(MemWrite),
     .IRWrite(IRWrite),
+    .PCWrite(PCWrite),
     .ResultSrc(ResultSrc),
     .ALUSrcB(ALUSrcB),
     .ALUSrcA(ALUSrcA),
@@ -63,9 +66,25 @@ control u_control(
 
     .hart_halt_req(hart_halt_req),
     .hart_resume_req(hart_resume_req),
-    .hart_halted(hart_halted)
+    .hart_halted(hart_halted),
+
+    .progbuf_exec   (progbuf_exec),
+    .progbuf_done   (progbuf_done) // from FSM 
 );
 
+// ==================================================================
+// Instruction register
+// Progbuf path has priority over normal IRWrite from memory so that
+// the injected instruction is visible at S_DECODE on the very next cycle.
+// ==================================================================
+always_ff @(posedge clk or negedge rst_n) begin 
+    if (!rst_n) instruction <= 32'b0;
+    else if (progbuf_exec) instruction <= progbuf_instr;
+    else if (IRWrite) instruction <= mem_rdata;
+end 
+
+
+// ==================================================================
 // datapath wires 
 // ==================================================================
 logic [31:0] mem_addr;
@@ -79,15 +98,7 @@ logic [31:0] srcA, srcB;
 logic [31:0] dbg_rdata, dbg_wdata;
 logic [31:0] ImmExt;
 
-
-always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) 
-        instruction <= 32'b0;
-    else if (progbuf_exec) instruction <= progbuf_instr;
-    else if (IRWrite) instruction <= mem_rdata;
-end 
-
-
+// ==================================================================
 // Architectural pipeline registers
 // ==================================================================
 logic [31:0] register_a_in;             // Holds RD1 data (read from regfile)
@@ -112,37 +123,29 @@ end
 
 
 always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin 
-        alu_result_reg <= 32'b0;
-    end else begin 
-        alu_result_reg <= ALUResult;
-    end 
+    if (!rst_n) alu_result_reg <= 32'b0;
+    else alu_result_reg <= ALUResult; 
 end
 
 
 
 always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n)
-        mem_data_reg <= 32'b0;
-    else
-        mem_data_reg <= mem_rdata;
+    if (!rst_n) mem_data_reg <= 32'b0;
+    else        mem_data_reg <= mem_rdata;
 end
 
 
 
 always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n)
-        pc_old <= 32'b0;
-    else
-        pc_old <= pc;
+    if (!rst_n)  pc_old <= 32'b0;
+    else if (IRWrite)         pc_old <= pc; // only in S_FETCH
 end
 
 
-
+// ==================================================================
 // combinational mux 
 // ==================================================================
 assign mem_addr = AdrSrc ? alu_result_reg : pc;
-assign PCNext = ALUResult;
 
 assign srcA = (ALUSrcA == 2'b00) ? pc :
               (ALUSrcA == 2'b01) ? pc_old :
@@ -154,8 +157,14 @@ assign srcB = (ALUSrcB == 2'b00) ? register_b_in :
 assign writeback_data = (ResultSrc == 2'b00) ? alu_result_reg :
                         (ResultSrc == 2'b01) ? mem_data_reg : 
                                                ALUResult;
-
-
+// No exception detection yet
+assign progbuf_exception = 1'b0;
+assign PCNext = (ResultSrc == 2'b00) ? alu_result_reg : 
+                (ResultSrc == 2'b01) ? mem_data_reg : 
+                ALUResult;
+ 
+// ==================================================================
+// MEM 
 // ==================================================================
 
 memory#(
@@ -214,21 +223,4 @@ regfile u_regfile(
 );
 
 
-
-// programme buffer 
-// ==================================================================
-logic progbuf_exec_d; // to track execution of prog buffer 
-
-always_ff @(posedge clk or negedge rst_n) begin 
-    if (!rst_n) begin 
-        progbuf_exec_d <= 1'b0;
-        progbuf_done   <= 1'b0;
-    end else begin 
-        progbuf_exec_d <= progbuf_exec; 
-        progbuf_done   <= progbuf_exec_d; // one cycle ater execution, progbuf is done !
-    end 
-end 
-
-assign progbuf_exception = 1'b0; // need to change 
-
-endmodule 
+endmodule : cpu

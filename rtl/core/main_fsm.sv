@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
-module main_fsm (
+module main_fsm 
+import riscv_pkg::*;
+(
     input  logic clk, 
     input  logic rst_n,
     input  opcode_t op,
@@ -8,7 +10,13 @@ module main_fsm (
     // hart interface (from DM)
     input  logic hart_halt_req,
     input  logic hart_resume_req,
-    output logic hart_halted, // status 
+    output logic hart_halted, 
+
+
+    // progbuf interface
+    input  logic progbuf_exec,
+    output logic progbuf_done,
+
 
     output logic Branch, 
     output logic PCUpdate,
@@ -23,20 +31,40 @@ module main_fsm (
     output logic [1:0] ALUOp
 );
 
-import riscv_pkg::*;
+
 state_t state, next_state ; 
 
-always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n)
-        state <= S_FETCH;
-    else if (hart_halt_req)
-        state <= S_HALTED;
-    else if (hart_resume_req)
-        state <= S_FETCH;
-    else
+logic progbuf_active;
+
+// ============================================================================
+// State register + progbuf bookkeeping
+// ============================================================================
+always_ff @(posedge clk or negedge rst_n) begin 
+    if (!rst_n) begin
+        state          <= S_FETCH;
+        progbuf_active <= 1'b0;
+        progbuf_done   <= 1'b0;
+
+    end else if (hart_halt_req) begin 
+        state          <= S_HALTED;
+        progbuf_active <= 1'b0;
+        progbuf_done   <= 1'b0;
+    end else if (hart_resume_req) begin 
+        state          <= S_FETCH;
+        progbuf_active <= 1'b0;
+        progbuf_done   <= 1'b0;
+    end else begin 
         state <= next_state;
+        if (state == S_HALTED && progbuf_exec) progbuf_active <= 1; 
+        else if (progbuf_active && next_state == S_HALTED) progbuf_active <= 0;
+        progbuf_done <= progbuf_active && (next_state == S_HALTED);
+
+    end 
 end 
 
+// ============================================================================
+// Next-state / output logic
+// ============================================================================
 always_comb begin 
     next_state = state; 
     // DEFAULT VALUES 
@@ -70,23 +98,16 @@ always_comb begin
 
         S_DECODE : begin 
             case (op)                  
-                OPCODE_I_TYPE_LOAD : begin 
-                    next_state = S_MEMADR;
-                end 
-                OPCODE_S_TYPE : begin  
-                    next_state = S_MEMADR;
-                end 
-                OPCODE_R_TYPE : begin 
-                    next_state = S_EXECUTER;
-                end 
+                OPCODE_I_TYPE_LOAD : next_state = S_MEMADR;
+                OPCODE_S_TYPE      : next_state = S_MEMADR;
+                OPCODE_R_TYPE      : next_state = S_EXECUTER;
+                OPCODE_I_TYPE_ALU  : next_state = S_EXECUTEI;
+
                 OPCODE_B_TYPE : begin 
                     ALUSrcA = 2'b01;
                     ALUSrcB = 2'b01;
                     ALUOp = 2'b00;
                     next_state = S_BEQ;
-                end 
-                OPCODE_I_TYPE_ALU : begin 
-                    next_state = S_EXECUTEI; 
                 end 
 
                 OPCODE_J_TYPE : begin 
@@ -105,11 +126,7 @@ always_comb begin
             ALUSrcA = 2'b10 ;
             ALUSrcB = 2'b01 ; 
             ALUOp   = 2'b00 ;
-            if (op == OPCODE_I_TYPE_LOAD) begin
-                next_state = S_MEMREAD;
-            end else begin  // sw 
-                next_state = S_MEMWRITE;
-            end 
+            next_state = (op == OPCODE_I_TYPE_LOAD) ? S_MEMREAD : S_MEMWRITE;
         end 
 
         S_MEMREAD : begin 
@@ -122,7 +139,7 @@ always_comb begin
         S_MEMWB : begin 
             ResultSrc  = 2'b01; 
             RegWrite   = 1'b1;
-            next_state = S_FETCH; 
+            next_state = progbuf_active ? S_HALTED : S_FETCH;
         end 
 
         S_MEMWRITE : begin 
@@ -130,6 +147,7 @@ always_comb begin
             AdrSrc     = 1'b1; 
             MemWrite   = 1'b1;
             next_state = S_FETCH;
+            next_state = progbuf_active ? S_HALTED : S_FETCH;
         end 
 
         S_EXECUTER : begin 
@@ -150,11 +168,12 @@ always_comb begin
             ResultSrc  =  2'b00; 
             RegWrite   = 1'b1;
             next_state = S_FETCH;
+            next_state = progbuf_active ? S_HALTED : S_FETCH;
         end 
 
         S_JAL : begin 
-            ALUSrcA    = 2'b01;
-            ALUSrcB    = 2'b10;
+            ALUSrcA    = 2'b01; // OldPC
+            ALUSrcB    = 2'b10; // 4
             ALUOp      = 2'b00;
             ResultSrc  = 2'b00;
             PCUpdate   = 1'b1;
@@ -167,20 +186,16 @@ always_comb begin
             ALUOp      = 2'b01; 
             ResultSrc  = 2'b00; 
             Branch     = 1'b1;
-            next_state = S_FETCH; 
+            next_state = progbuf_active ? S_HALTED : S_FETCH;
         end 
 
         S_HALTED : begin 
-            PCUpdate    = 1'b0;
-            RegWrite    = 1'b0;
-            MemWrite    = 1'b0;
-            IRWrite     = 1'b0;
-            hart_halted = 1'b1; // how can i step then ? in this case 
+            hart_halted = 1'b1; 
+            if (progbuf_exec) next_state = S_DECODE;
         end 
         default begin 
             next_state = S_FETCH;
         end 
     endcase
-    
 end 
 endmodule 

@@ -21,7 +21,7 @@ always_ff @(posedge clk or negedge rst_n) begin
         if (hart_pc_we) begin
             pc <= hart_pc_wdata;
         end 
-        else if (PCWrite)begin // else if (dbg_mode == 0 && PCWrite == 1) ?? 
+        else if (PCWrite)begin 
             pc <= PCNext;
         end 
     end 
