@@ -12,7 +12,7 @@ rtl/core/signext.sv
 rtl/core/cpu_top.sv
 rtl/core/main_fsm.sv
 
-rtl/debug/cdc_cmd_bridge.sv
+rtl/debug/dmi_cdc_bridge.sv
 rtl/debug/progbuf.sv
 rtl/debug/debug_module.sv
 rtl/dtm/dtm_top.sv

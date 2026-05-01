@@ -1,0 +1,230 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include "rv32i.h"
+
+static int32_t imm_i(uint32_t instr) { // extract immediate value 
+    return (int32_t) instr >> 20;
+}
+
+static int32_t imm_s(uint32_t instr) {
+    return ((int32_t)(instr & 0xFE000000) >> 20)
+         | ((instr >> 7) & 0x1F);
+}
+
+static int32_t imm_b(uint32_t instr) {
+    return ((int32_t)(instr & 0x80000000) >> 19)
+         | ((instr & 0x00000080) <<  4)
+         | ((instr & 0x7E000000) >> 20)
+         | ((instr & 0x00000F00) >> 7);
+}
+
+static int32_t imm_u(uint32_t instr) {
+    return (int32_t)(instr & 0xFFFFF000);
+}
+
+static int32_t imm_j(uint32_t instr) {
+    return ((int32_t)(instr & 0x80000000) >> 11)
+         | (instr & 0x000FF000)
+         | ((instr & 0x00100000) >>  9)
+         | ((instr & 0x7FE00000) >> 20);
+}
+
+
+
+static void add_cycles(cpu_t *cpu, uint32_t op, uint32_t f3) { 
+    switch (op)
+    {
+    case OP_R : cpu -> cycles += CYCLES_ALU; break;
+    case OP_I_ALU:  cpu->cycles += CYCLES_ALU;    break;
+    case OP_LOAD:   cpu->cycles += CYCLES_LOAD;   break;
+    case OP_STORE:  cpu->cycles += CYCLES_STORE;  break;
+    case OP_BRANCH: cpu->cycles += CYCLES_BRANCH; break;
+    case OP_JAL:    cpu->cycles += CYCLES_JAL;    break;
+    case OP_JALR:   cpu->cycles += CYCLES_JALR;   break;
+    case OP_LUI:    cpu->cycles += CYCLES_LUI;    break;
+    case OP_AUIPC:  cpu->cycles += CYCLES_AUIPC;  break;
+    default:        cpu->cycles += 1;             break;
+    }
+    (void) f3; 
+}
+
+// ============================================================================
+// step — fetch, decode, execute one instruction.
+// ============================================================================
+
+void step(cpu_t *cpu, bool trace) { 
+    // FETCH 
+    if (cpu -> pc & 0x3) {
+        fprintf(stderr, "FETCH ALIGNMENT: PC =0x%08X not word-aligned\n", cpu->pc);
+        exit(1);
+    }
+    uint32_t pc = cpu->pc;
+    uint32_t instr = mem_read_w(cpu,pc);
+
+
+    // DECODE 
+    uint32_t op = OPCODE(instr);
+    uint32_t rd  = RD(instr);
+    uint32_t rs1 = RS1(instr);
+    uint32_t rs2 = RS2(instr);
+    uint32_t f3  = FUNCT3(instr);
+    uint32_t f7  = FUNCT7(instr);
+
+    if (trace) trace_print(cpu, pc, instr);
+
+    cpu->pc = pc + 4; // default 
+
+    // EXECUTE 
+    switch (op)
+    {
+        // R-TYPE: ADD SUB AND OR XOR SLL SRL SRA SLT SLTU
+        case OP_R : {
+            uint32_t a = cpu -> regs[rs1];
+            uint32_t b = cpu -> regs[rs2];
+            uint32_t result = 0;
+
+            switch (f3)
+            {
+                case 0x0 : result = (f7 & 0x20) ? a - b : a + b; break; 
+                case 0x1 : result = a << (b & 0x1F); break; 
+                case 0x2: result = ((int32_t)a < (int32_t)b) ? 1 : 0; break;
+                case 0x3 : result = (a < b) ? 1 : 0; break; 
+                case 0x4: result = a ^ b; break ;
+                case 0x5 : result = (f7 & 0x20)
+                                    ? (uint32_t)((int32_t)a >> (b & 0x1F))
+                                    : a >> (b & 0x1F); break ;
+                case 0x6: result = a | b; break;
+                case 0x7: result = a & b; break;
+                default : 
+                    fprintf(stderr, "Unknown funct3: %u\n", f3);
+                    exit(1);break;
+            }
+        if (rd) {cpu->regs[rd] = result;} break ; 
+        
+        
+        }
+
+        case OP_I_ALU : {
+            uint32_t a = cpu -> regs[rs1];
+            int32_t imm = imm_i(instr);
+            uint32_t result = 0;
+            uint32_t shamt = (instr >> 20) & 0x1F;
+            switch (f3)
+            {
+                case 0x0 : result = a + (uint32_t)imm; break; 
+                case 0x1 : result = a << shamt; break; 
+                case 0x2 : result = ((int32_t)a < imm) ? 1 : 0; break;  
+                case 0x3: result = (a < (uint32_t)imm) ? 1 : 0;break; 
+                case 0x4: result = a ^ (uint32_t)imm;break; 
+                case 0x5: result = (f7 & 0x20)
+                                 ? (uint32_t)((int32_t)a >> shamt)               // SRAI
+                                 : a >> shamt; break; 
+                case 0x6: result = a | (uint32_t)imm; break;  
+                case 0x7: result = a & (uint32_t)imm;break; 
+                default : 
+                    fprintf(stderr, "Unknown funct3: %u\n", f3);
+                    exit(1);break;
+            }
+            if (rd) {cpu -> regs[rd] = result;}
+            break ;
+        }
+
+        case OP_LOAD: {
+            uint32_t addr = (uint32_t)((uint32_t) cpu->regs[rs1] + imm_i(instr));
+            uint32_t result = 0;
+            switch (f3)
+            {
+            case 0x0: result =  (uint32_t)(int32_t)(int8_t)mem_read_b(cpu, addr); break; 
+            case 0x1: result =  (uint32_t)(int32_t)(int16_t)mem_read_h(cpu, addr); break;      
+            case 0x2: result =  mem_read_w(cpu, addr); break;
+            case 0x4: result = (uint32_t)mem_read_b(cpu, addr); break;
+            case 0x5: result = (uint32_t)mem_read_h(cpu, addr); break; 
+            default : fprintf(stderr, "Unknown LOAD funct3=0x%X at PC=0x%08X\n", f3, pc); exit(1);break;
+            }
+            if(rd) cpu->regs[rd] = result;
+            break; 
+        }
+
+        case OP_STORE: {
+            uint32_t addr = (uint32_t)((int32_t)cpu->regs[rs1] + imm_s(instr));
+            switch (f3)
+            {
+                case 0x0: mem_write_b(cpu, addr, (uint8_t) cpu->regs[rs2]); break; // SB
+                case 0x1: mem_write_h(cpu, addr, (uint16_t)cpu->regs[rs2]); break; // SH
+                case 0x2: mem_write_w(cpu, addr,            cpu->regs[rs2]); break; // SW
+                default:
+                    fprintf(stderr, "Unknown STORE funct3=0x%X at PC=0x%08X\n", f3, pc);
+                    exit(1);break;
+            }
+            break; 
+
+        }
+
+        case OP_BRANCH: {
+            uint32_t a = cpu->regs[rs1];
+            uint32_t b = cpu->regs[rs2];
+            bool taken = 0;
+
+            switch (f3)
+            {
+                case 0x0: taken = (a == b);                              break; // BEQ
+                case 0x1: taken = (a != b);                              break; // BNE
+                case 0x4: taken = ((int32_t)a <  (int32_t)b);           break; // BLT
+                case 0x5: taken = ((int32_t)a >= (int32_t)b);           break; // BGE
+                case 0x6: taken = (a <  b);                              break; // BLTU
+                case 0x7: taken = (a >= b);                              break; // BGEU
+                default:
+                    fprintf(stderr, "Unknown BRANCH funct3=0x%X at PC=0x%08X\n", f3, pc);
+                    exit(1);break;
+            }
+            if (taken) {cpu ->pc = (uint32_t)((int32_t)pc + imm_b(instr));} break;
+        }
+
+        case OP_LUI: {
+            if (rd) {cpu->regs[rd] = (uint32_t)imm_u(instr);} break;
+        }
+
+        case OP_AUIPC: {
+            if (rd) cpu->regs[rd] = (uint32_t)((int32_t)pc + imm_u(instr));
+            break;
+        }
+
+        case OP_JAL: {
+            uint32_t ret = pc + 4;
+            cpu->pc = (uint32_t)((int32_t)pc + imm_j(instr));
+            if (rd) cpu->regs[rd] = ret; // return address stored 
+            break; 
+        }
+
+
+        case OP_JALR: {
+            uint32_t ret = pc + 4;
+            cpu->pc = (uint32_t)((int32_t)cpu->regs[rs1] + imm_i(instr)) & ~1u;
+            if (rd) cpu->regs[rd] = ret;
+            break;
+        }
+
+        // SYSTEM: EBREAK / ECALL — halt simulation
+        case OP_SYSTEM: {
+            if (instr == 0x00100073) { // EBREAK
+                printf("\n[ISS] EBREAK at PC=0x%08X — halting\n", pc);
+            } else {
+                printf("\n[ISS] ECALL at PC=0x%08X — halting\n", pc);
+            }
+            cpu->halted = true;
+            break;
+        }
+
+
+        default: 
+            fprintf(stderr, "[ISS] Unknown opcode 0x%02X at PC=0x%08X instr=0x%08X\n", 
+                    op, pc, instr);
+            cpu ->halted = true;
+            break; 
+
+    }
+
+    cpu ->regs[0] = 0; // always 0 
+    cpu -> instrs ++ ;
+    add_cycles(cpu, op, f3);
+}

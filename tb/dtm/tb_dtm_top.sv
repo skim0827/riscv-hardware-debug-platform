@@ -350,7 +350,6 @@ task automatic test_dtmcs_dmireset();
 
     $display("[JTAG] DTMCS Write Sequence (dmihardreset=%b, dmireset=%b)", 
              0, 1);
-    jtag_shift_ir(IR_DTMCS);
 
     dtmcs_value = 32'h0;
     dtmcs_value[17] = 0; // dmihardreset=0

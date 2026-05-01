@@ -175,7 +175,6 @@ dmi_cdc_bridge cdc_bridge (
     // CLK side (to DM)
     .clk_dmi_addr   (clk_dmi_addr),
     .clk_dmi_wdata  (clk_dmi_wdata),
-    .clk_dmi_op     (clk_dmi_op),
     .clk_dmi_we     (clk_dmi_we),
     .clk_dmi_re     (clk_dmi_re),
     .clk_dmi_valid  (clk_dmi_valid),

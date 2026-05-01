@@ -36,7 +36,7 @@ module dmi_cdc_bridge (
     output logic        clk_dmi_we, 
     output logic        clk_dmi_re, 
     output logic        clk_dmi_valid, // one-cycle pulse on new transaction
-    input  logic        clk_dmi_rdata  
+    input  logic [31:0] clk_dmi_rdata  
 ); 
 // ============================================================================
 // Forward path : tck → clk
