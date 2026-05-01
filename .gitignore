@@ -1,2 +1,10 @@
 *.vcd 
 obj_dir/
+
+.vscode/
+*.dat
+
+# Synthesis generated files
+synth/system_flat.v
+synth/synth_out.v
+synth/synth_log.txt

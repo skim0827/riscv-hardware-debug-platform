@@ -72,3 +72,28 @@ clean:
 # make coverage suite=core tb=tb_alu
 # make coverage_view                    (view uncovered areas)
 # make clean                            (remove all generated files)
+
+# === Synthesis ===
+SYNTH_DIR   = synth
+RTL_PKGS    = rtl/package/dmi_pkg.sv rtl/package/riscv_pkg.sv
+RTL_CORE    = rtl/core/alu.sv rtl/core/alu_decoder.sv rtl/core/instr_decoder.sv \
+              rtl/core/signext.sv rtl/core/regfile.sv rtl/core/program_counter.sv \
+              rtl/core/memory.sv rtl/core/main_fsm.sv rtl/core/control.sv \
+              rtl/core/cpu_top.sv
+RTL_DEBUG   = rtl/jtag/tap_fsm.sv rtl/dtm/dtm_top.sv rtl/debug/dmi_cdc_bridge.sv \
+              rtl/debug/progbuf.sv rtl/debug/debug_module.sv
+RTL_TOP     = rtl/system/system_top.sv
+ALL_RTL     = $(RTL_PKGS) $(RTL_CORE) $(RTL_DEBUG) $(RTL_TOP)
+
+.PHONY: synth clean-synth
+
+synth: $(SYNTH_DIR)/system_flat.v
+	cd $(SYNTH_DIR) && yosys synth.ys 2>&1 | tee synth_log.txt
+	
+synth-core: $(SYNTH_DIR)/system_flat.v
+	cd $(SYNTH_DIR) && yosys synth_core.ys 2>&1 | tee synth_core_log.txt
+$(SYNTH_DIR)/system_flat.v: $(ALL_RTL)
+	sv2v $(ALL_RTL) -w $@
+
+clean-synth:
+	rm -f $(SYNTH_DIR)/system_flat.v $(SYNTH_DIR)/synth_log.txt $(SYNTH_DIR)/synth_out.v

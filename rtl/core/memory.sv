@@ -31,7 +31,7 @@ end
 // a[1:0] byte offset (ignored for word access)
 // a[8:2] word index (7 bits → 128 entries)
 
-always_comb begin read :
+always_comb begin 
     rd = mem[a[8:2]]; // aligned read 
 end
 

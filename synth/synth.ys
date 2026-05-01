@@ -1,0 +1,4 @@
+read_verilog system_flat.v
+synth -top system_top -flatten
+stat
+write_verilog -noattr synth_out.v

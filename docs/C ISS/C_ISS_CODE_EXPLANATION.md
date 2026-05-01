@@ -216,3 +216,19 @@ max_instr = (uint64_t)atoll(argv[i]);
 else if (argv[i][0] == '-') // argv[0] = "./sim"
 ```
 - does this argument start with `-`
+
+---
+## Result 
+
+```
+./sim --trace tests/test_all.hex
+Instructions retired : 14      ← 15 instructions in file, 1 was skipped (branch)
+Cycles               : 53      ← total FSM states across all instructions
+IPC                  : 0.2642  ← instructions per cycle
+CPI                  : 3.7857  ← cycles per instruction (average)
+```
+
+### What is Dhrystone?
+Dhrystone is a benchmark program — a standard test program that the whole industry uses to measure CPU performance. It was written in 1984 and is still used today because it's small, simple, and well understood.
+It's designed to represent "typical" software workloads. When you run it and get an IPC number, that number is comparable to other processors that have also run Dhrystone. That's the point — it's a common reference.
+Your test_all.hex is 14 hand-written instructions. That's enough to verify correctness but it's too small to be a meaningful performance number. Dhrystone runs thousands of instructions with a realistic mix of load/store/branch/ALU — the IPC you get from it is the one that goes on your CV.
