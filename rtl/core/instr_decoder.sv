@@ -9,7 +9,7 @@ module instr_decoder(
 always_comb begin
 
     case (opcode) 
-        OPCODE_I_TYPE_LOAD : ImmSrc = 2'b00;
+        OPCODE_I_TYPE_LOAD : ImmSrc = 3'b00;
         OPCODE_I_TYPE_ALU : ImmSrc = 3'b000;
         OPCODE_I_TYPE_JALR : ImmSrc = 3'b000; 
         OPCODE_S_TYPE : ImmSrc = 3'b01;  
@@ -18,7 +18,7 @@ always_comb begin
         OPCODE_U_TYPE_LUI   : ImmSrc = 3'b100;
         OPCODE_U_TYPE_AUIPC : ImmSrc = 3'b100;
 
-        default: ImmSrc = 2'b00;
+        default: ImmSrc = 3'b00;
     endcase
 
 end 

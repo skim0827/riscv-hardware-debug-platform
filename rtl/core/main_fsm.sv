@@ -110,7 +110,7 @@ always_comb begin
                     ALUSrcA = 2'b01;
                     ALUSrcB = 2'b01;
 
-                    next_state = S_BEQ;
+                    next_state = S_BRANCH;
                 end 
 
                 OPCODE_I_TYPE_JALR : begin 
@@ -123,7 +123,11 @@ always_comb begin
                 OPCODE_U_TYPE_LUI : next_state = S_LUI;
 
                 OPCODE_U_TYPE_AUIPC : next_state = S_AUIPC; 
-
+                OPCODE_J_TYPE : begin 
+                    ALUSrcA    = 2'b01; 
+                    ALUSrcB    = 2'b01;
+                    next_state = S_JAL;
+                end 
                 default next_state = S_FETCH;
             endcase
         end 
@@ -202,6 +206,7 @@ always_comb begin
             ResultSrc  = 2'b10; // combinational ALUResult = rs1+imm
             PCUpdate   = 1'b1;
             next_state = S_JALR_WB; // writes ALUOut=OldPC+4 to rd
+        end 
 
         S_JALR_WB : begin 
             ALUSrcA = 2'b01; 
@@ -211,11 +216,10 @@ always_comb begin
             RegWrite = 1'b1;
             next_state = progbuf_active ? S_HALTED : S_FETCH;
         end 
-
-        end 
+ 
 
         S_LUI : begin 
-            ALUSrcA = 2'b10; // x0 = 0 
+            ALUSrcA = 2'b11; // 32'b0 
             ALUSrcB = 2'b01;
 
             ResultSrc = 2'b10;
@@ -225,7 +229,7 @@ always_comb begin
         end 
 
         S_AUIPC : begin 
-            ALUSrcA = 2'b11; // 0  
+            ALUSrcA = 2'b01; // OldPC  
             ALUSrcB = 2'b01; 
 
             ResultSrc = 2'b10; 
@@ -239,9 +243,8 @@ always_comb begin
             hart_halted = 1'b1; 
             if (progbuf_exec) next_state = S_DECODE;
         end 
-        default begin 
-            next_state = S_FETCH;
-        end 
+        default : next_state = S_FETCH;
     endcase
 end 
+
 endmodule 

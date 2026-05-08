@@ -15,6 +15,8 @@ module memory #(
 );
 
 logic [31:0] mem [0:WORDS - 1];
+logic [31:0] word; // byte addressed 0 - 3 bytes in one words 
+assign word = mem[a[8:2]];
 
 always_ff @(posedge clk) begin 
     if (rst_n == 0) begin

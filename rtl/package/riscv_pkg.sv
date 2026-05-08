@@ -15,18 +15,22 @@ package riscv_pkg;
     }alu_control_t;
 
     typedef enum logic [3:0] {
-        S_FETCH = 4'b0000,
-        S_DECODE = 4'b0001, 
-        S_MEMADR = 4'b0010,
-        S_MEMREAD = 4'b0011,
-        S_MEMWB = 4'b0100,
-        S_MEMWRITE = 4'b0101,
-        S_EXECUTER = 4'b0110,
-        S_ALUWB = 4'b0111, 
-        S_EXECUTEI = 4'b1000, 
-        S_JAL = 4'b1001,
-        S_BRANCH = 4'b1010,
-        S_HALTED = 4'b1011
+        S_FETCH,
+        S_DECODE, 
+        S_MEMADR,
+        S_MEMREAD,
+        S_MEMWB,
+        S_MEMWRITE,
+        S_EXECUTER,
+        S_ALUWB, 
+        S_EXECUTEI, 
+        S_JAL,
+        S_JALR_WB,
+        S_BRANCH,
+        S_HALTED,
+        S_LUI,
+        S_JALR, 
+        S_AUIPC
     } state_t;
 
 
