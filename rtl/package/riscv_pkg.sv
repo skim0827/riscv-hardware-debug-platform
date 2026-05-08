@@ -1,12 +1,17 @@
 `timescale 1ns/1ps
 package riscv_pkg;
     // page 407 
-    typedef enum logic [2:0] {
-        ALU_ADD = 3'b00,
-        ALU_SUB = 3'b01,
-        ALU_AND = 3'b10,
-        ALU_OR = 3'b011,
-        ALU_SLT = 3'b101
+    typedef enum logic [3:0] {
+        ALU_ADD,
+        ALU_SUB,
+        ALU_AND,
+        ALU_OR,
+        ALU_XOR,
+        ALU_SLT,
+        ALU_SLTU,
+        ALU_SLL,
+        ALU_SRL,
+        ALU_SRA
     }alu_control_t;
 
     typedef enum logic [3:0] {
@@ -20,7 +25,7 @@ package riscv_pkg;
         S_ALUWB = 4'b0111, 
         S_EXECUTEI = 4'b1000, 
         S_JAL = 4'b1001,
-        S_BEQ = 4'b1010,
+        S_BRANCH = 4'b1010,
         S_HALTED = 4'b1011
     } state_t;
 
@@ -34,7 +39,7 @@ package riscv_pkg;
         OPCODE_U_TYPE_LUI     = 7'b0110111,
         OPCODE_U_TYPE_AUIPC   = 7'b0010111,
         OPCODE_J_TYPE         = 7'b1101111,
-        OPCODE_J_TYPE_JALR    = 7'b1100111
+        OPCODE_I_TYPE_JALR    = 7'b1100111
     } opcode_t;
 
     typedef enum logic [7:0] {
@@ -74,6 +79,5 @@ package riscv_pkg;
         IR_IDCODE = 4'b0001,
         IR_BYPASS = 4'b1111,
         IR_DEBUG = 4'b0010
-
     } ir_t;
 endpackage

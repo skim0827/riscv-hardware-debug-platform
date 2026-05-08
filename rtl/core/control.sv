@@ -18,7 +18,7 @@ import riscv_pkg::*;
     output logic [1:0] ALUSrcA,
     output logic AdrSrc,
     output alu_control_t ALUControl,
-    output logic [1:0] ImmSrc,
+    output logic [2:0] ImmSrc,
 
     // Hart Interface  (from DM)
     input  logic hart_halt_req,
@@ -30,11 +30,14 @@ import riscv_pkg::*;
     output logic progbuf_done
 );
 
-
-logic [1:0] ALUOp;
 logic Branch;
 logic PCUpdate;
-assign PCWrite = (Zero && Branch) || PCUpdate;
+
+logic branch_condition ;
+assign branch_condition = Zero ^ (funct3[0] ^ funct3[2]);
+assign PCWrite = (branch_condition && Branch) || PCUpdate;
+
+logic ForceAdd; 
 
 main_fsm u_fsm (
     .clk(clk),
@@ -54,19 +57,19 @@ main_fsm u_fsm (
     .ALUSrcB(ALUSrcB),
     .ALUSrcA(ALUSrcA),
     .AdrSrc(AdrSrc),
-    .ALUOp(ALUOp)
+    .ForceAdd(ForceAdd)
 );
 
 alu_decoder u_alu(
-    .op5(op[5]),
+    .opcode(op),
     .funct3(funct3),
     .funct7_5(funct7_5),
-    .ALUOp(ALUOp),
-    .ALUControl(ALUControl)
+    .ForceAdd(ForceAdd),
+    .ALUControl_out(ALUControl)
 );
 
 instr_decoder u_instr(
-    .op(op),
+    .opcode(op),
     .ImmSrc(ImmSrc)
 );
 

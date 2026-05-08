@@ -28,7 +28,7 @@ import riscv_pkg::*;
     output logic [1:0] ALUSrcB,
     output logic [1:0] ALUSrcA, 
     output logic       AdrSrc,
-    output logic [1:0] ALUOp
+    output logic       ForceAdd
 );
 
 
@@ -73,7 +73,7 @@ always_comb begin
 
     ALUSrcA   = 2'b00;
     ALUSrcB   = 2'b00;
-    ALUOp     = 2'b00;
+
     ResultSrc = 2'b00;
     AdrSrc    = 1'b0;
     MemWrite  = 1'b0;
@@ -81,6 +81,8 @@ always_comb begin
     IRWrite   = 1'b0;
 
     hart_halted = (state == S_HALTED);
+    ForceAdd = 0;
+    
 
     case (state)  
 
@@ -88,7 +90,7 @@ always_comb begin
 
             ALUSrcA = 2'b00;    // from PC 
             ALUSrcB = 2'b10;    // 4 
-            ALUOp = 2'b00;      // add 
+            ForceAdd = 1;       // always ADD for PC+4
             ResultSrc = 2'b10;  // alu result 
             PCUpdate = 1'b1;    // force pc write high 
             IRWrite = 1'b1;
@@ -97,6 +99,7 @@ always_comb begin
         end 
 
         S_DECODE : begin 
+            ForceAdd = 1; // always ADD in decode stage : oldPC + Imm
             case (op)                  
                 OPCODE_I_TYPE_LOAD : next_state = S_MEMADR;
                 OPCODE_S_TYPE      : next_state = S_MEMADR;
@@ -106,26 +109,29 @@ always_comb begin
                 OPCODE_B_TYPE : begin 
                     ALUSrcA = 2'b01;
                     ALUSrcB = 2'b01;
-                    ALUOp = 2'b00;
+
                     next_state = S_BEQ;
                 end 
 
-                OPCODE_J_TYPE : begin 
+                OPCODE_I_TYPE_JALR : begin 
                     ALUSrcA = 2'b01;
-                    ALUSrcB = 2'b01;
-                    ALUOp = 2'b00;
-                    next_state = S_JAL;
+                    ALUSrcB = 2'b10;
+
+                    next_state = S_JALR;
                 end 
-                default begin
-                    next_state = S_FETCH;
-                end
+
+                OPCODE_U_TYPE_LUI : next_state = S_LUI;
+
+                OPCODE_U_TYPE_AUIPC : next_state = S_AUIPC; 
+
+                default next_state = S_FETCH;
             endcase
         end 
 
         S_MEMADR : begin 
             ALUSrcA = 2'b10 ;
             ALUSrcB = 2'b01 ; 
-            ALUOp   = 2'b00 ;
+
             next_state = (op == OPCODE_I_TYPE_LOAD) ? S_MEMREAD : S_MEMWRITE;
         end 
 
@@ -146,47 +152,87 @@ always_comb begin
             ResultSrc  = 2'b00; 
             AdrSrc     = 1'b1; 
             MemWrite   = 1'b1;
-            next_state = S_FETCH;
             next_state = progbuf_active ? S_HALTED : S_FETCH;
         end 
 
         S_EXECUTER : begin 
             ALUSrcA    = 2'b10;
             ALUSrcB    = 2'b00;
-            ALUOp      = 2'b10;
+
             next_state = S_ALUWB;
         end 
 
         S_EXECUTEI : begin 
             ALUSrcA    = 2'b10;
             ALUSrcB    = 2'b01;
-            ALUOp      = 2'b10;
+
             next_state = S_ALUWB;
         end 
 
         S_ALUWB : begin 
             ResultSrc  =  2'b00; 
             RegWrite   = 1'b1;
-            next_state = S_FETCH;
+            
             next_state = progbuf_active ? S_HALTED : S_FETCH;
         end 
 
         S_JAL : begin 
             ALUSrcA    = 2'b01; // OldPC
             ALUSrcB    = 2'b10; // 4
-            ALUOp      = 2'b00;
+
             ResultSrc  = 2'b00;
             PCUpdate   = 1'b1;
             next_state = S_ALUWB;
         end 
 
-        S_BEQ : begin
+        S_BRANCH : begin
             ALUSrcA    = 2'b10; 
             ALUSrcB    = 2'b00;
-            ALUOp      = 2'b01; 
+
             ResultSrc  = 2'b00; 
             Branch     = 1'b1;
             next_state = progbuf_active ? S_HALTED : S_FETCH;
+        end 
+
+
+        S_JALR : begin 
+            ALUSrcA = 2'b10; 
+            ALUSrcB = 2'b01; 
+
+            ResultSrc  = 2'b10; // combinational ALUResult = rs1+imm
+            PCUpdate   = 1'b1;
+            next_state = S_JALR_WB; // writes ALUOut=OldPC+4 to rd
+
+        S_JALR_WB : begin 
+            ALUSrcA = 2'b01; 
+            ALUSrcB = 2'b10; 
+            ForceAdd = 1'b1; // OldPC + 4 
+            ResultSrc = 2'b10; // combinatorial OldPC + 4 = rd 
+            RegWrite = 1'b1;
+            next_state = progbuf_active ? S_HALTED : S_FETCH;
+        end 
+
+        end 
+
+        S_LUI : begin 
+            ALUSrcA = 2'b10; // x0 = 0 
+            ALUSrcB = 2'b01;
+
+            ResultSrc = 2'b10;
+            RegWrite = 1'b1;
+            next_state = progbuf_active ? S_HALTED : S_FETCH;
+
+        end 
+
+        S_AUIPC : begin 
+            ALUSrcA = 2'b11; // 0  
+            ALUSrcB = 2'b01; 
+
+            ResultSrc = 2'b10; 
+            RegWrite = 1'b1;
+
+            next_state = progbuf_active ? S_HALTED : S_FETCH;
+
         end 
 
         S_HALTED : begin 

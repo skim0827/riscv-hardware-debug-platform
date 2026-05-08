@@ -204,60 +204,8 @@ Implements RISC-V Debug Specification v0.13.2 registers and command handling.
 
 **Files**: `rtl/core/cpu_top.sv` and sub-modules
 
-A multi-cycle RISC-V processor implementing RV32I (32 base instructions).
 
-#### Multi-Cycle Execution
 
-A multi-cycle processor executes one instruction completely before fetching the next, advancing through distinct stages across multiple clock cycles.
-
-```
-Instruction Execution Timeline:
-
-Cycle:  1       2       3       4       5       6
-        ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐
-Clock:  │   │   │   │   │   │   │   │   │   │   │   │
-        └───┘   └───┘   └───┘   └───┘   └───┘   └───┘
-        
-Instr1:  IF      ID      EX      MEM     WB    (fetch next)
-                                                 Instr2: IF ...
-
-Multi-cycle Operation Sequence:
-
-Stage 1: IF (Instruction Fetch)
-         ├─ Read PC from mux (normal or branch redirection)
-         ├─ Access instruction memory
-         └─ Latch instruction; prepare to increment PC
-
-Stage 2: ID (Instruction Decode)
-         ├─ Decode opcode, funct3, and funct7
-         ├─ Read source registers from register file
-         ├─ Generate control signals
-         └─ Sign-extend immediate values as needed
-
-Stage 3: EX (Execute)
-         ├─ ALU performs arithmetic/logic operations
-         ├─ Branch comparators determine jump conditions
-         ├─ Calculate memory address (for load/store)
-         └─ Generate next PC (PC+4 or branch target)
-
-Stage 4: MEM (Memory Access)
-         ├─ Perform load/store operations
-         └─ Data memory read/write (single-cycle in this design)
-
-Stage 5: WB (Write-Back)
-         ├─ Update general purpose registers with results
-         ├─ Update program counter (if branch/jump)
-         └─ Prepare control signals for next instruction
-```
-
-**Key Distinction from Pipelining**:
-
-In a multi-cycle design:
-- Only **one instruction** is active at any time
-- No instruction-level parallelism (ILP)
-- When a branch occurs, no "pipeline flush" is needed (only one instruction anyway)
-- Simpler hazard logic compared to pipelined designs
-- Straightforward state machine control
 
 #### Core Submodules
 
@@ -287,9 +235,9 @@ In a multi-cycle design:
 **Total**: 32 instructions
 
 **Not Yet Implemented**:
-- M-type (mul, div, rem) – Phase 2
-- Full CSR support – Phase 2
-- Floating-point – Future
+- M-type (mul, div, rem)
+- Full CSR support 
+- Floating-point 
 
 ---
 
@@ -314,40 +262,6 @@ In a multi-cycle design:
 - **No caching** (intended for small embedded systems)
 - **Unified instruction/data memory** in simulation
 
----
-
-## Debug Workflow Example
-
-### Scenario: Halt and inspect a running processor
-
-```
-Step 1: Debugger connects via JTAG
-   └─ OpenOCD / GDB establishes JTAG connection
-
-Step 2: Debugger sends HALT command
-   └─ Shifts WRITE(dmcontrol=0x10) with haltreq=1 into DTM
-   └─ DTM converts to DMI: {addr=0x10, data=0x8000_0001, op=WRITE}
-   └─ Debug Module asserts dbg_halt signal
-
-Step 3: CPU recognises halt request
-   └─ Finishes current instruction
-   └─ Enters Debug Mode
-   └─ Sets dbg_halted=1 status signal
-
-Step 4: Debugger polls DMSTATUS
-   └─ Shifts READ(dmstatus=0x11) into DTM
-   └─ Debug Module returns: anyhalted=1, allrunning=0
-   └─ Debugger confirms halt successful
-
-Step 5: Inspect registers
-   └─ Shifts READ(data0) and address to inspect register 5 (a5)
-   └─ Debug Module places GPR[5] into data0
-   └─ Debugger reads data0 via DMI
-
-Step 6: Resume execution
-   └─ Shifts WRITE(dmcontrol) with resumereq=1
-   └─ CPU resumes from current PC
-```
 
 ---
 
@@ -389,29 +303,6 @@ Step 6: Resume execution
 | Power (typical, estimated) | ~200 mW |
 | Memory latency | 1 cycle |
 
-### Multi-Cycle Execution Timeline
-
-Typical instruction throughput in multi-cycle architecture:
-
-```
-Add Instruction (add r1, r2, r3):
-  Cycle:  1       2       3       4       5       
-          IF      ID      EX      MEM/WB  
-  State:  FETCH   DECODE  EXECUTE WRITEBACK
-          (complete)
-
-Load Instruction (lw r1, 0(r2)):
-  Cycle:  1       2       3       4       5
-          IF      ID      EX      MEM     WB
-  State:  FETCH   DECODE  ADDR    LOAD    WRITEBACK
-          (complete – memory access adds cycle)
-
-Branch Instruction (beq r1, r2, target):
-  Cycle:  1       2       3       4      5        6       7
-          IF      ID      EX      CMP    FLUSH   IF      ID
-  State:  FETCH   DECODE  CALC    COMP   (1 cyc) FETCH   DECODE
-          (complete – no pipeline to flush, but target calculation adds cycle)
-```
 
 **Key Characteristics**:
 
@@ -451,6 +342,3 @@ Branch Instruction (beq r1, r2, target):
 
 ---
 
-**Document Version**: 1.1  
-**Last Updated**: April 2026  
-**Status**: Phase 2 – Debug Module Enhancement

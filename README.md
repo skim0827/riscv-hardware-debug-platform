@@ -11,6 +11,8 @@ This project implements a complete debugging platform featuring:
 - **Debug Transport Module (DTM)** - Converts JTAG sequences into Debug Module Interface (DMI) transactions
 - **Debug Module** - Full RISC-V external debug module with register control, abstract commands, and data registers
 - **Comprehensive Test Suite** - Simulation-based verification with coverage analysis
+### Complete System Diagram
+![complete system diagram](docs/images/flow_overview.png)
 
 ## Features
 
@@ -117,14 +119,6 @@ riscv-hardware-debug-platform/
     ├── TESTING.md            # Testing guide
     └── DEBUG_PROTOCOL.md     # Debug specification
 ```
-
-## Documentation
-
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design overview and component diagrams
-- **[MODULES.md](docs/MODULES.md)** - Detailed module documentation and signal references
-- **[TESTING.md](docs/TESTING.md)** - Simulation execution and test methodology
-- **[DEBUG_PROTOCOL.md](docs/DEBUG_PROTOCOL.md)** - RISC-V debugging protocol reference
-
 ## Key Specifications
 
 | Aspect | Specification |
@@ -136,6 +130,14 @@ riscv-hardware-debug-platform/
 | **Debug Spec** | RISC-V Debug v0.13.2 |
 | **Simulation** | Verilator |
 | **HDL** | SystemVerilog |
+
+## Documentation
+
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design overview and component diagrams
+- **[MODULES.md](docs/MODULES.md)** - Detailed module documentation and signal references
+- **[TESTING.md](docs/TESTING.md)** - Simulation execution and test methodology
+
+
 
 ## Development
 
@@ -166,14 +168,6 @@ gdb program.elf
 (gdb) target remote localhost:3333
 ```
 
-## Contributing
-
-When contributing code:
-1. Follow SystemVerilog naming conventions (find detailed guide in [MODULES.md](docs/MODULES.md))
-2. Ensure all tests pass: `make coverage suite=<suite>`
-3. Maintain or improve code coverage
-4. Update documentation for new features
-
 ## Performance Targets
 
 - **Clock Frequency**: 100+ MHz
@@ -181,35 +175,7 @@ When contributing code:
 - **Power**: ~200 mW (estimated)
 - **CPI**: ~1.3–1.5 (cycles per instruction)
 
-## Current Status
-
-- ✅ TAP FSM (JTAG controller state machine)
-- ✅ JTAG IR/DR registers
-- ✅ DMI protocol
-- ✅ Basic Debug Module
-- 🔄 Full specification compliance (Phase 2)
-- 🔄 Abstract commands (Phase 2)
-- 📋 Programme buffer support (Phase 2/3)
-
-## Limitations
-
-- **Multiply/Divide**: Not yet implemented (RV32M extension)
-- **CSRs**: Limited to essential debug/control CSRs
-- **Exception Handling**: Basic only
-- **Memory**: Simplified, single-cycle access
-
-## License
 
 
-## Contact & Support
 
-For questions or issues:
-- Open an issue on the repository
-- Check existing documentation in `/docs`
-- Review test cases in `/tb` for usage examples
 
----
-
-**Last Updated**: April 2026  
-**Maintainer**: Sonia Kim  
-**Status**: Active Development – Phase 2

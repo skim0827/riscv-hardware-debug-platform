@@ -30,7 +30,12 @@ module cpu(
 // ==================================================================
 logic [31:0] PCNext, pc;
 logic PCWrite, RegWrite, MemWrite, IRWrite, AdrSrc, Zero; 
-logic [1:0] ResultSrc, ALUSrcB, ALUSrcA, ImmSrc;
+logic [1:0] ResultSrc, ALUSrcB, ALUSrcA;
+logic [2:0] ImmSrc;
+logic [2:0] mem_funct3;
+assign mem_funct3 = AdrSrc ? funct3 : 3'b010;
+
+
 logic Branch;
 logic PCUpdate;
 alu_control_t ALUControl;
@@ -149,7 +154,9 @@ assign mem_addr = AdrSrc ? alu_result_reg : pc;
 
 assign srcA = (ALUSrcA == 2'b00) ? pc :
               (ALUSrcA == 2'b01) ? pc_old :
-                                   register_a_in;
+              (ALUSrcA == 2'b10) ? register_a_in : 
+                                   32'b0;
+
 assign srcB = (ALUSrcB == 2'b00) ? register_b_in : 
               (ALUSrcB == 2'b01) ? ImmExt :
               (ALUSrcB == 2'b10) ? 32'd4 : 
@@ -175,6 +182,7 @@ memory#(
     .a(mem_addr),
     .wd(mem_wdata),
     .we(MemWrite),
+    .funct3(mem_funct3),
     .rd(mem_rdata)
 );
 
