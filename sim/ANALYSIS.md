@@ -19,6 +19,11 @@ In LEO or deep space, high-energy particles (protons, heavy ions from cosmic ray
 4. SECDED with Chipkill / multi-bit ECC : Used for DRAM (not SRAM) where entire word lines can fail. Uses *BCH codes* or *Reed-Solomon* instead of Hamming. Much more complex coding theory, relevant to **DRAM controllers** not embedded processors.
 5. Proton/heavy-ion cross-section modeling : Using *CREME96* or *OMERE* tools to compute actual **SEU rates** from an orbital environment (altitude, inclination, solar cycle). This is radiation physics, not computer architecture, a completely separate discipline.
 
+## Watchdog 
+A watchdog timer monitors real time. It fires if the system doesn't check in within N milliseconds. In hardware it's a countdown timer peripheral: software writes to a memory-mapped register to reset it, if it expires the CPU gets reset.
+In a C ISS this doesn't translate. **The ISS has no real time**. It steps instruction by instruction as fast as your host CPU allows. There's no concept of "the CPU hung for 500ms" because the simulation never hangs independently of the host process.
+
+
 ## The Goal 
 Measuring a quantified reliability/performance trade-off.
 
@@ -42,3 +47,55 @@ Measuring a quantified reliability/performance trade-off.
 
 3. Estimation 
 TMR alone (+14%) is higher than EDAC alone (+9%). ***The reason***: EDAC only taxes memory instructions (~20-25% of a typical Dhrystone workload), while TMR taxes every instruction with a register read. The voter per instruction is a small penalty, but it applies universally.
+
+## Haming Code 
+32 data + **6 parity** + 1 overall parity = 39 bits 
+
+$2r≥m+r+1$
+- `m` = data bits 
+- `r` = parity bits 
+
+| Position | Purpose |
+| -------- | ------- |
+| 1        | P1      |
+| 2        | P2      |
+| 4        | P4      |
+| 8        | P8      |
+| 16       | P16     |
+| 32       | P32     |
+
+Hamming parity bits are placed at powers of two.
+
+```
+bit 63 ............. bit 39 | bit 38 ......... bit 32 | bit 31 ......... bit 0
+        unused              |   7 ECC bits            |   32 data bits
+                            |   (edac_encode returns)  |
+``` 
+
+| Syndrome | Overall parity | Meaning                       |
+| -------- | -------------- | ----------------------------- |
+| 0        | 0              | No error                      |
+| nonzero  | 1              | **Single**-bit error          |
+| nonzero  | 0              | **Double**-bit error          |
+| 0        | 1              | Overall parity bit error only |
+
+## Step space 
+```
+FETCH    → mem_read_w_space instead of mem_read_w
+
+DECODE   → rs1 and rs2 values come through tmr_vote
+           rd writes go to all 3 copies
+
+EXECUTE  → identical switch, no changes here
+
+MEMORY   → mem_read/write_space instead of baseline
+
+CYCLES   → add_cycles same logic but +CYCLES_TMR_VOTE on every instruction
+           +CYCLES_EDAC_ENCODE/DECODE already handled inside mem functions
+```
+## Result expected 
+Mode            What it models                Question answered
+──────────────────────────────────────────────────────────────────
+Baseline        Plain multicycle core         What is my base IPC?
+Space-hardened  Multicycle + EDAC/TMR/WDT     What does hardening cost?
+Lockstep        Two baseline CPUs + comparator Can I detect faults?

@@ -13,7 +13,6 @@ void cpu_reset(cpu_t *cpu) {
     // memory keeps loaded program 
 }
 
-// here !!!!!!!!!!!!!!!!!!!
 void load_hex(cpu_t *cpu, const char *filename) {
     FILE *f = fopen(filename, "r");
     if (!f) {

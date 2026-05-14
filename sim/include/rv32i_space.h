@@ -23,12 +23,12 @@ typedef struct {
     uint32_t pc; 
     uint64_t mem_protected[MEM_WORDS];  // bits [31:0] = data, bits [38:32] = ECC
 
-    uint64_t instrs; 
+    uint64_t instrs; // how many instructions have been executed so far
     uint64_t cycles; 
     
-    uint64_t edac_corrections; // single bit errors corrected 
-    uint64_t edac_detections; // double bit errors detected (uncorrectable)
-    uint64_t tmr_corrections; // reg reads where voter had to correct a mismatch 
+    uint32_t edac_corrections; // single bit errors corrected 
+    uint32_t edac_detections; // double bit errors detected (uncorrectable)
+    uint32_t tmr_corrections; // reg reads where voter had to correct a mismatch 
     
     bool halted; 
     sim_mode_t mode; 
@@ -55,5 +55,8 @@ uint32_t tmr_vote (uint32_t a, uint32_t b, uint32_t c, bool *corrected);
 void step_space(cpu_space_t *cpu , bool trace);
 
 
+void fault_inject_mem_bit(cpu_space_t *cpu);
+void fault_inject_reg_bit(cpu_space_t *cpu);
+void fault_inject_print_stats(cpu_space_t *cpu);
 
 #endif 
