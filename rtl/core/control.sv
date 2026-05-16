@@ -16,7 +16,6 @@ import riscv_pkg::*;
     output logic [1:0] ResultSrc,
     output logic [1:0] ALUSrcB, 
     output logic [1:0] ALUSrcA,
-    output logic AdrSrc,
     output alu_control_t ALUControl,
     output logic [2:0] ImmSrc,
 
@@ -56,7 +55,6 @@ main_fsm u_fsm (
     .ResultSrc(ResultSrc),
     .ALUSrcB(ALUSrcB),
     .ALUSrcA(ALUSrcA),
-    .AdrSrc(AdrSrc),
     .ForceAdd(ForceAdd)
 );
 

@@ -27,7 +27,6 @@ import riscv_pkg::*;
     output logic [1:0] ResultSrc, 
     output logic [1:0] ALUSrcB,
     output logic [1:0] ALUSrcA, 
-    output logic       AdrSrc,
     output logic       ForceAdd
 );
 
@@ -75,7 +74,6 @@ always_comb begin
     ALUSrcB   = 2'b00;
 
     ResultSrc = 2'b00;
-    AdrSrc    = 1'b0;
     MemWrite  = 1'b0;
     RegWrite  = 1'b0;
     IRWrite   = 1'b0;
@@ -140,8 +138,7 @@ always_comb begin
         end 
 
         S_MEMREAD : begin 
-            ResultSrc = 2'b00;
-            AdrSrc = 1'b1; 
+            ResultSrc = 2'b00; 
             next_state = S_MEMWB;
             
         end 
@@ -154,7 +151,6 @@ always_comb begin
 
         S_MEMWRITE : begin 
             ResultSrc  = 2'b00; 
-            AdrSrc     = 1'b1; 
             MemWrite   = 1'b1;
             next_state = progbuf_active ? S_HALTED : S_FETCH;
         end 

@@ -22,18 +22,22 @@ module cpu(
     input  logic [31:0] progbuf_instr, 
     input  logic        progbuf_exec,
     output logic        progbuf_done,
-    output logic        progbuf_exception
+    output logic        progbuf_exception,
+
+    output logic        imem_corrected, 
+    output logic        imem_detected,
+    output logic        dmem_corrected,
+    output logic        dmem_detected
 );
 
 // ==================================================================
 // control signals 
 // ==================================================================
 logic [31:0] PCNext, pc;
-logic PCWrite, RegWrite, MemWrite, IRWrite, AdrSrc, Zero; 
+logic PCWrite, RegWrite, MemWrite, IRWrite, Zero; 
 logic [1:0] ResultSrc, ALUSrcB, ALUSrcA;
 logic [2:0] ImmSrc;
-logic [2:0] mem_funct3;
-assign mem_funct3 = AdrSrc ? funct3 : 3'b010;
+
 
 
 logic Branch;
@@ -65,7 +69,6 @@ control u_control(
     .ResultSrc(ResultSrc),
     .ALUSrcB(ALUSrcB),
     .ALUSrcA(ALUSrcA),
-    .AdrSrc(AdrSrc),
     .ALUControl(ALUControl),
     .ImmSrc(ImmSrc),
 
@@ -85,17 +88,24 @@ control u_control(
 always_ff @(posedge clk or negedge rst_n) begin 
     if (!rst_n) instruction <= 32'b0;
     else if (progbuf_exec) instruction <= progbuf_instr;
-    else if (IRWrite) instruction <= mem_rdata;
+    else if (IRWrite) instruction <= imem_rdata;
 end 
 
 
 // ==================================================================
 // datapath wires 
 // ==================================================================
-logic [31:0] mem_addr;
+logic [31:0] imem_addr;
+logic [31:0] dmem_addr;
 logic [31:0] mem_wdata;
 assign mem_wdata = register_b_in;
-logic [31:0] mem_rdata;
+assign imem_addr = pc; 
+assign dmem_addr = alu_result_reg;
+
+
+
+logic [31:0] imem_rdata; 
+logic [31:0] dmem_rdata; 
 logic [31:0] ALUResult;
 logic [31:0] rd1, rd2;
 logic [31:0] writeback_data;
@@ -136,7 +146,7 @@ end
 
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) mem_data_reg <= 32'b0;
-    else        mem_data_reg <= mem_rdata;
+    else        mem_data_reg <= dmem_rdata;
 end
 
 
@@ -150,8 +160,6 @@ end
 // ==================================================================
 // combinational mux 
 // ==================================================================
-assign mem_addr = AdrSrc ? alu_result_reg : pc;
-
 assign srcA = (ALUSrcA == 2'b00) ? pc :
               (ALUSrcA == 2'b01) ? pc_old :
               (ALUSrcA == 2'b10) ? register_a_in : 
@@ -175,17 +183,33 @@ assign PCNext = (ResultSrc == 2'b00) ? alu_result_reg :
 // ==================================================================
 
 memory#(
-    .mem_init("../tb/test_memory.hex")
-) u_memory (
+    .mem_init("../tb/test_imem.hex")
+) u_IMEM (
     .clk(clk),
     .rst_n(rst_n), 
-    .a(mem_addr),
-    .wd(mem_wdata),
-    .we(MemWrite),
-    .funct3(mem_funct3),
-    .rd(mem_rdata)
+    .a(imem_addr),
+    .wd(32'b0),
+    .we(1'b0),
+    .funct3(3'b010),
+    .rd(imem_rdata),
+    .corrected(imem_corrected),
+    .detected(imem_detected)
+
 );
 
+memory#(
+    .mem_init("../tb/test_dmem.hex")
+) u_DMEM (
+    .clk(clk),
+    .rst_n(rst_n), 
+    .a(dmem_addr),
+    .wd(mem_wdata),
+    .we(MemWrite),
+    .funct3(funct3),
+    .rd(dmem_rdata),
+    .corrected(dmem_corrected),
+    .detected(dmem_detected)
+);
 program_counter u_pc (
     .clk(clk),
     .rst_n(rst_n),
