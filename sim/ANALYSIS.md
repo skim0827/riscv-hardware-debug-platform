@@ -99,3 +99,7 @@ Mode            What it models                Question answered
 Baseline        Plain multicycle core         What is my base IPC?
 Space-hardened  Multicycle + EDAC/TMR/WDT     What does hardening cost?
 Lockstep        Two baseline CPUs + comparator Can I detect faults?
+
+
+## Simplification made for the project 
+In a real radiation-hardened design you'd typically also triplicate the clock tree and reset net, but for an FPGA demo that shows the concept, shared clock is standard and expected

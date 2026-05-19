@@ -26,7 +26,9 @@ import riscv_pkg::*;
 
     // Progbuf interface
     input  logic progbuf_exec,
-    output logic progbuf_done
+    output logic progbuf_done, 
+
+    output logic tmr_fsm_error
 );
 
 logic Branch;
@@ -38,7 +40,7 @@ assign PCWrite = (branch_condition && Branch) || PCUpdate;
 
 logic ForceAdd; 
 
-main_fsm u_fsm (
+tmr_main_fsm u_fsm (
     .clk(clk),
     .rst_n(rst_n),
     .op(op),
@@ -55,7 +57,8 @@ main_fsm u_fsm (
     .ResultSrc(ResultSrc),
     .ALUSrcB(ALUSrcB),
     .ALUSrcA(ALUSrcA),
-    .ForceAdd(ForceAdd)
+    .ForceAdd(ForceAdd),
+    .tmr_error(tmr_fsm_error)
 );
 
 alu_decoder u_alu(

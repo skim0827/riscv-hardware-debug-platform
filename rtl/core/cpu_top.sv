@@ -27,7 +27,13 @@ module cpu(
     output logic        imem_corrected, 
     output logic        imem_detected,
     output logic        dmem_corrected,
-    output logic        dmem_detected
+    output logic        dmem_detected,
+
+    // tmr error telemetry
+    output logic        tmr_pc_error,
+    output logic        tmr_fsm_error,
+    output logic        tmr_rf_error, 
+    output logic        tmr_ir_error
 );
 
 // ==================================================================
@@ -77,7 +83,8 @@ control u_control(
     .hart_halted(hart_halted),
 
     .progbuf_exec   (progbuf_exec),
-    .progbuf_done   (progbuf_done) // from FSM 
+    .progbuf_done   (progbuf_done),
+    .tmr_fsm_error(tmr_fsm_error)
 );
 
 // ==================================================================
@@ -85,12 +92,28 @@ control u_control(
 // Progbuf path has priority over normal IRWrite from memory so that
 // the injected instruction is visible at S_DECODE on the very next cycle.
 // ==================================================================
+logic [31:0] ir_0, ir_1, ir_2;
+
 always_ff @(posedge clk or negedge rst_n) begin 
-    if (!rst_n) instruction <= 32'b0;
-    else if (progbuf_exec) instruction <= progbuf_instr;
-    else if (IRWrite) instruction <= imem_rdata;
+    if (!rst_n)            ir_0 <= 32'b0;
+    else if (progbuf_exec) ir_0 <= progbuf_instr;
+    else if (IRWrite)      ir_0 <= imem_rdata;
 end 
 
+always_ff @(posedge clk or negedge rst_n) begin 
+    if (!rst_n)            ir_1 <= 32'b0;
+    else if (progbuf_exec) ir_1 <= progbuf_instr;
+    else if (IRWrite)      ir_1 <= imem_rdata;
+end 
+
+always_ff @(posedge clk or negedge rst_n) begin 
+    if (!rst_n)            ir_2 <= 32'b0;
+    else if (progbuf_exec) ir_2 <= progbuf_instr;
+    else if (IRWrite)      ir_2 <= imem_rdata;
+end 
+
+assign instruction  = (ir_0 & ir_1) | (ir_0 & ir_2) | (ir_1 & ir_2);
+assign tmr_ir_error = |(ir_0 ^ ir_1) | |(ir_1 ^ ir_2);
 
 // ==================================================================
 // datapath wires 
@@ -210,7 +233,7 @@ memory#(
     .corrected(dmem_corrected),
     .detected(dmem_detected)
 );
-program_counter u_pc (
+tmr_pc u_pc (
     .clk(clk),
     .rst_n(rst_n),
     .PCNext(PCNext),
@@ -219,7 +242,8 @@ program_counter u_pc (
     .hart_pc_we(hart_pc_we),
     .hart_pc_wdata(hart_pc_wdata),
     .hart_pc_rdata(hart_pc_rdata),
-    .pc(pc)
+    .pc(pc),
+    .tmr_error(tmr_pc_error)
 );
 
 signext u_signext (
@@ -236,7 +260,7 @@ alu u_alu (
     .Zero(Zero)
 );
 
-regfile u_regfile(
+tmr_regfile u_regfile(
     .clk(clk),
     .rst_n(rst_n),
 
@@ -251,7 +275,8 @@ regfile u_regfile(
     .hart_regfile_wdata(hart_regfile_wdata),
     .rd1(rd1),
     .rd2(rd2),
-    .hart_regfile_rdata(hart_regfile_rdata)
+    .hart_regfile_rdata(hart_regfile_rdata),
+    .tmr_error(tmr_rf_error)
 );
 
 
