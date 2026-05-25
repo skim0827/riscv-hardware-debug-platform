@@ -119,7 +119,7 @@ end
 // ========================================================================
 always_comb begin : output_logic
     pb_instr     = progbuf_instr_current; 
-    pb_exec      = (progbuf_state == PROGBUF_EXEC && !progbuf_exec_d); 
+    pb_exec      = (progbuf_state == PROGBUF_EXEC && !progbuf_exec_d); // one-cycle pulse
     pb_done      = (progbuf_state == PROGBUF_DONE && progbuf_state_next == PROGBUF_IDLE);
     pb_exception = 1'b0; // for now no exception..
 end 

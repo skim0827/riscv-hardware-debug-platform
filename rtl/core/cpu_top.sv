@@ -221,7 +221,7 @@ memory#(
 );
 
 memory#(
-    .mem_init("../tb/test_dmem.hex")
+    .mem_init("")
 ) u_DMEM (
     .clk(clk),
     .rst_n(rst_n), 

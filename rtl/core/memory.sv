@@ -11,7 +11,7 @@ module memory #(
     input logic we,
     input logic [2:0] funct3,  
 
-    output logic [31:0] rd,
+    output logic [31:0] rd, 
     output logic corrected,
     output logic detected
 );
@@ -49,7 +49,7 @@ always_comb begin : ecc_decode
 
     stored_overall = stored_ecc[6];
     syndrome = h ^ (stored_ecc[5:0]); 
-    overall_err = (^data ^ ^h ^ stored_overall);
+    overall_err = (^data ^ ^stored_ecc[5:0] ^ stored_overall);
 
     if (syndrome == 6'b0 && overall_err == 1'b0) begin 
         corrected_data = data;
@@ -73,12 +73,20 @@ function automatic [6:0] ecc_encode(input logic [31:0] data);
     return {(^data ^ ^h), h};
 endfunction
 
+task automatic load_init();
+    if (mem_init != "") begin
+        logic [31:0] raw [0:WORDS-1];
+        $readmemh(mem_init, raw);
+        for (int i = 0; i < WORDS; i++)
+            mem[i] = {ecc_encode(raw[i]), raw[i]};
+    end
+endtask
+
+initial load_init();
 
 
 always_ff @(posedge clk) begin 
-    if (rst_n == 0) begin
-        for (int i = 0; i < WORDS; i++) mem[i] <= 39'b0;
-    end else if (we) begin
+    if (we) begin
 
         case (funct3[1:0])
             2'b10 : mem[a[8:2]] <= {ecc_encode(wd), wd};

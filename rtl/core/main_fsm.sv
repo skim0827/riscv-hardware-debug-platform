@@ -33,7 +33,7 @@ import riscv_pkg::*;
 
 state_t state, next_state ; 
 
-logic progbuf_active;
+logic progbuf_active, progbuf_pending;
 
 // ============================================================================
 // State register + progbuf bookkeeping
@@ -42,31 +42,40 @@ always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         state          <= S_FETCH;
         progbuf_active <= 1'b0;
+        progbuf_pending  <= 1'b0;
         progbuf_done   <= 1'b0;
 
     end else if (hart_halt_req) begin 
         state          <= S_HALTED;
         progbuf_active <= 1'b0;
+        progbuf_pending  <= 1'b0;
         progbuf_done   <= 1'b0;
     end else if (hart_resume_req) begin 
         state          <= S_FETCH;
         progbuf_active <= 1'b0;
+        progbuf_pending  <= 1'b0;
         progbuf_done   <= 1'b0;
     end else begin 
         state <= next_state;
-        if (state == S_HALTED && progbuf_exec) progbuf_active <= 1; 
-        else if (progbuf_active && next_state == S_HALTED) progbuf_active <= 0;
+        
+        
+        if (progbuf_exec) progbuf_pending <= 1'b1;
+
+        if (state == S_HALTED && (progbuf_pending || progbuf_exec)) begin 
+            progbuf_active <= 1'b1;
+            progbuf_pending <= 1'b1;
+        end else if (progbuf_active && next_state == S_HALTED) begin 
+            progbuf_active <= 1'b1;
+        end 
+
         progbuf_done <= progbuf_active && (next_state == S_HALTED);
 
     end 
 end 
 
-// ============================================================================
-// Next-state / output logic
-// ============================================================================
 always_comb begin 
     next_state = state; 
-    // DEFAULT VALUES 
+
     PCUpdate  = 1'b0;
     Branch    = 1'b0;
 
@@ -237,7 +246,7 @@ always_comb begin
 
         S_HALTED : begin 
             hart_halted = 1'b1; 
-            if (progbuf_exec) next_state = S_DECODE;
+            if (progbuf_pending || progbuf_exec) next_state = S_DECODE;
         end 
         default : next_state = S_FETCH;
     endcase

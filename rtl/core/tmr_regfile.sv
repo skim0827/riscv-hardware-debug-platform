@@ -60,7 +60,10 @@ assign hart_regfile_rdata = (hart_rdata_0 & hart_rdata_1) |
                              (hart_rdata_0 & hart_rdata_2) |
                              (hart_rdata_1 & hart_rdata_2);
 
-assign tmr_error = |(rd1_0 ^ rd1_1) | |(rd1_1 ^ rd1_2) |
-                   |(rd2_0 ^ rd2_1) | |(rd2_1 ^ rd2_2);
+assign tmr_error =
+    |(rd1_0 ^ rd1_1) | |(rd1_1 ^ rd1_2) |
+    |(rd2_0 ^ rd2_1) | |(rd2_1 ^ rd2_2) |
+    |(hart_rdata_0 ^ hart_rdata_1) | |(hart_rdata_1 ^ hart_rdata_2);
 
+    
 endmodule 
