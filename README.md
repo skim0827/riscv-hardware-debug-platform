@@ -80,12 +80,9 @@ Fault telemetry is system-visible:
 ## Documentation
 
 Start here:
-
-- [Documentation Index](docs/README.md)
 - [Phase 1 - Hardened Compute Tile](docs/phase1_hardened_compute_tile.md)
 - [Phase 2 - SoC Integration](docs/phase2_soc_integration.md)
 - [Memory Map](docs/memory_map.md)
-- [Verification Status](docs/verification_status.md)
 
 ## Repository Layout
 
