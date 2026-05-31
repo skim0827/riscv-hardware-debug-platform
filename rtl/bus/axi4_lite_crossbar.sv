@@ -12,10 +12,9 @@
 // restriction in lightweight single-master designs. Full AXI4-Lite allows
 // W to arrive first; we would need a skid buffer to handle that case, which
 // adds complexity without teaching anything new here.
-// All slave AW/AR ready signals are assumed combinatorially available.
-// The slave wrappers we write next will always assert ready immediately,
-// so this is safe. A production crossbar would add a register stage here
-// to break the combinatorial path.
+// AW/AR ready from the selected slave is reflected back to the master.
+// This keeps the master-side handshake aligned with the real slave-side
+// handshake instead of assuming every slave is always ready.
 module axi4_lite_crossbar
     import axi4_lite_pkg::*;
 (
@@ -87,14 +86,8 @@ typedef enum logic [1:0] {
 wr_state_t wr_state;
 int wr_slv; 
 logic wr_decerr; 
-logic _unused_slave_ready;
-
-always_comb begin
-    _unused_slave_ready = 1'b0;
-    for (int i = 0; i < NUM_SLAVES; i++) begin
-        _unused_slave_ready |= s_awready[i] | s_arready[i];
-    end
-end
+int wr_sel;
+assign wr_sel = decode_addr(m_awaddr);
 
 always_ff @(posedge clk or negedge rst_n) begin 
     if (!rst_n) begin 
@@ -104,9 +97,11 @@ always_ff @(posedge clk or negedge rst_n) begin
     end else begin 
         case (wr_state)
             WR_IDLE: begin 
-                wr_slv    <= decode_addr(m_awaddr);
-                wr_decerr <= (decode_addr(m_awaddr) == NUM_SLAVES);
-                wr_state  <= WR_DATA;
+                if (m_awvalid && m_awready) begin
+                    wr_slv    <= wr_sel;
+                    wr_decerr <= (wr_sel == NUM_SLAVES);
+                    wr_state  <= WR_DATA;
+                end
             end 
 
             WR_DATA: begin
@@ -128,7 +123,8 @@ always_ff @(posedge clk or negedge rst_n) begin
 end
 
 
-assign m_awready = (wr_state == WR_IDLE);
+assign m_awready = (wr_state == WR_IDLE) ?
+                       ((wr_sel == NUM_SLAVES) ? 1'b1 : s_awready[wr_sel]) : 1'b0;
 assign m_wready = (wr_state == WR_DATA) ?
                       (wr_decerr ? 1'b1 : s_wready[wr_slv]) : 1'b0;
 assign m_bvalid = (wr_state == WR_RESP) ?
@@ -143,7 +139,10 @@ typedef enum logic [1:0] {
 
 rd_state_t rd_state;
 int        rd_slv;
+int        rd_sel;
 logic      rd_decerr;
+
+assign rd_sel = decode_addr(m_araddr);
 
 always_ff @(posedge clk or negedge rst_n) begin 
     if (!rst_n) begin
@@ -154,8 +153,8 @@ always_ff @(posedge clk or negedge rst_n) begin
         case (rd_state)
             RD_IDLE: begin 
                 if (m_arvalid && m_arready) begin
-                    rd_slv    <= decode_addr(m_araddr);
-                    rd_decerr <= (decode_addr(m_araddr) == NUM_SLAVES);
+                    rd_slv    <= rd_sel;
+                    rd_decerr <= (rd_sel == NUM_SLAVES);
                     rd_state  <= RD_WAIT;
                 end
             end 
@@ -171,7 +170,8 @@ always_ff @(posedge clk or negedge rst_n) begin
     end
 end 
 
-assign m_arready = (rd_state == RD_IDLE);
+assign m_arready = (rd_state == RD_IDLE) ?
+                       ((rd_sel == NUM_SLAVES) ? 1'b1 : s_arready[rd_sel]) : 1'b0;
 assign m_rvalid  = (rd_state == RD_WAIT) ?
                        (rd_decerr ? 1'b1 : s_rvalid[rd_slv]) : 1'b0;
 assign m_rdata   = (rd_state == RD_WAIT) ?
@@ -184,7 +184,7 @@ assign m_rresp   = (rd_state == RD_WAIT) ?
 always_comb begin
     for (int i = 0; i < NUM_SLAVES; i++) begin
         s_awaddr[i]  = m_awaddr;
-        s_awvalid[i] = (wr_state == WR_IDLE) && m_awvalid && (decode_addr(m_awaddr) == i);
+        s_awvalid[i] = (wr_state == WR_IDLE) && m_awvalid && (wr_sel == i);
 
         s_wdata[i]   = m_wdata;
         s_wstrb[i]   = m_wstrb; // master write strobe
@@ -193,7 +193,7 @@ always_comb begin
         s_bready[i]  = (wr_state == WR_RESP) && !wr_decerr && (wr_slv == i) && m_bready;
 
         s_araddr[i]  = m_araddr;
-        s_arvalid[i] = (rd_state == RD_IDLE) && m_arvalid && (decode_addr(m_araddr) == i);
+        s_arvalid[i] = (rd_state == RD_IDLE) && m_arvalid && (rd_sel == i);
 
         s_rready[i]  = (rd_state == RD_WAIT) && !rd_decerr && (rd_slv == i) && m_rready;
 
