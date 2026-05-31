@@ -110,7 +110,6 @@ logic [31:0] tck_dmi_rdata;
 // DMI bus — clk domain (DM inputs, from CDC bridge)
 logic [6:0]  clk_dmi_addr;
 logic [31:0] clk_dmi_wdata;
-logic [1:0]  clk_dmi_op;
 logic        clk_dmi_we;
 logic        clk_dmi_re;
 logic        clk_dmi_valid;
@@ -126,6 +125,9 @@ logic [5:0]  dtmcs_abits;
 assign dtmcs_idle    = 3'b001;
 assign dtmcs_dmistat = 2'b00;
 assign dtmcs_abits   = 6'd7;
+
+logic _unused_dtmcs_reset;
+assign _unused_dtmcs_reset = dtmcs_dmihardreset | dtmcs_dmireset;
 
 // Hart interface (clk domain)
 logic        hart_halted;
@@ -202,6 +204,10 @@ logic [31:0] imem_rdata;
 logic [1:0]  imem_rresp;
 logic        imem_rvalid;
 logic        imem_rready;
+logic        imem_awready_unused;
+logic        imem_wready_unused;
+logic [1:0]  imem_bresp_unused;
+logic        imem_bvalid_unused;
 
 // Data bus (crossbar master)
 logic [31:0] cpu_m_awaddr;  logic cpu_m_awvalid; logic cpu_m_awready;
@@ -333,7 +339,7 @@ cpu u_cpu (
     // Hart interface
     .hart_halt_req     (hart_halt_req),
     .hart_resume_req   (hart_resume_req),
-    .hart_reset_req    (1'b0),             // single-hart system, tied off
+    .hart_reset_req    (hart_reset_req),
     .hart_halted       (hart_halted),
     .hart_regfile_addr (hart_regfile_addr),
     .hart_regfile_wdata(hart_regfile_wdata),
@@ -377,7 +383,7 @@ cpu u_cpu (
     .m_bready          (cpu_m_bready),
     .m_araddr          (cpu_m_araddr),
     .m_arvalid         (cpu_m_arvalid),
-    .m_arready         (cpu_m_awready),    // shared ready from crossbar
+    .m_arready         (cpu_m_arready),
     .m_rdata           (cpu_m_rdata),
     .m_rresp           (cpu_m_rresp),
     .m_rvalid          (cpu_m_rvalid),
@@ -457,9 +463,9 @@ axi4_lite_mem_slave #(
     .rst_n    (rst_n),
 
     // IMEM is read-only from the CPU side.
-    .s_awaddr (32'b0),  .s_awvalid(1'b0),  .s_awready(/* open */),
-    .s_wdata  (32'b0),  .s_wstrb  (4'b0),  .s_wvalid (1'b0),  .s_wready(/* open */),
-    .s_bresp  (/* open */), .s_bvalid(/* open */), .s_bready(1'b0),
+    .s_awaddr (32'b0),  .s_awvalid(1'b0),  .s_awready(imem_awready_unused),
+    .s_wdata  (32'b0),  .s_wstrb  (4'b0),  .s_wvalid (1'b0),  .s_wready(imem_wready_unused),
+    .s_bresp  (imem_bresp_unused), .s_bvalid(imem_bvalid_unused), .s_bready(1'b0),
 
     // Read — connected to CPU instruction fetch port
     .s_araddr (imem_araddr),

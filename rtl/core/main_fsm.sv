@@ -27,7 +27,10 @@ import riscv_pkg::*;
     output logic [1:0] ResultSrc, 
     output logic [1:0] ALUSrcB,
     output logic [1:0] ALUSrcA, 
-    output logic       ForceAdd
+    output logic       ForceAdd,
+
+    input  logic       stall,
+    output logic       MemRead
 );
 
 
@@ -84,6 +87,7 @@ always_comb begin
 
     ResultSrc = 2'b00;
     MemWrite  = 1'b0;
+    MemRead   = 1'b0;
     RegWrite  = 1'b0;
     IRWrite   = 1'b0;
 
@@ -102,7 +106,7 @@ always_comb begin
             PCUpdate = 1'b1;    // force pc write high 
             IRWrite = 1'b1;
 
-            next_state = S_DECODE;
+            next_state = stall ? S_FETCH : S_DECODE;
         end 
 
         S_DECODE : begin 
@@ -148,7 +152,8 @@ always_comb begin
 
         S_MEMREAD : begin 
             ResultSrc = 2'b00; 
-            next_state = S_MEMWB;
+            MemRead   = 1'b1;
+            next_state = stall ? S_MEMREAD : S_MEMWB;
             
         end 
 
@@ -161,7 +166,8 @@ always_comb begin
         S_MEMWRITE : begin 
             ResultSrc  = 2'b00; 
             MemWrite   = 1'b1;
-            next_state = progbuf_active ? S_HALTED : S_FETCH;
+            next_state = stall ? S_MEMWRITE :
+                         (progbuf_active ? S_HALTED : S_FETCH);
         end 
 
         S_EXECUTER : begin 

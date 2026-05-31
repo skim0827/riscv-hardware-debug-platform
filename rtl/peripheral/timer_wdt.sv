@@ -35,10 +35,12 @@ module timer_wdt (
 logic timer_en;
 logic wdt_en;
 logic wdt_kick;
+logic _unused_ctrl;
 
 assign timer_en = ctrl_i[0];
 assign wdt_en   = ctrl_i[1];
 assign wdt_kick = ctrl_i[2];
+assign _unused_ctrl = |ctrl_i[31:3];
 
 // Timer counter
 logic [31:0] timer_count;

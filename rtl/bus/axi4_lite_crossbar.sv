@@ -84,8 +84,17 @@ typedef enum logic [1:0] {
     WR_RESP
 } wr_state_t;
 
+wr_state_t wr_state;
 int wr_slv; 
 logic wr_decerr; 
+logic _unused_slave_ready;
+
+always_comb begin
+    _unused_slave_ready = 1'b0;
+    for (int i = 0; i < NUM_SLAVES; i++) begin
+        _unused_slave_ready |= s_awready[i] | s_arready[i];
+    end
+end
 
 always_ff @(posedge clk or negedge rst_n) begin 
     if (!rst_n) begin 

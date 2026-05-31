@@ -104,6 +104,7 @@ logic [31:0] aw_addr_r;
 logic [31:0] wd_r;
 logic        aw_recv;
 logic        w_recv;
+logic        _unused_write_inputs;
 
 assign irq_clear_pulse = (wr_state == WR_EXEC) &&
                          (aw_addr_r[11:0] == HEALTH_IRQ_STATUS);
@@ -112,6 +113,7 @@ assign irq_clear_bits  = wd_r;
 assign cnt_clear_pulse = (wr_state == WR_EXEC) &&
                          (aw_addr_r[11:0] == HEALTH_CTRL) &&
                          wd_r[0];
+assign _unused_write_inputs = |s_wstrb | |aw_addr_r[31:12];
 
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -171,6 +173,9 @@ typedef enum logic [1:0] {
 rd_state_t   rd_state;
 logic [31:0] rdata_r;
 logic [31:0] ar_addr_r;
+logic        _unused_read_addr;
+
+assign _unused_read_addr = |ar_addr_r[31:12];
 
 function automatic logic [31:0] reg_read(input logic [11:0] offset);
     case (offset)

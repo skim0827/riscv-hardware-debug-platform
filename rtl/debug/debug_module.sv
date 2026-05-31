@@ -85,6 +85,11 @@ logic           pb_start;
 logic           pb_halt_req;
 logic           pb_done; 
 logic           pb_exception;
+logic           _unused_debug_inputs;
+
+assign _unused_debug_inputs = progbuf_exception |
+                              is_csr_access |
+                              |cmd_access_reg[23:19];
 
 
 // ======================================================================

@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
+module instr_decoder
 import riscv_pkg::*;
-
-module instr_decoder(
+(
     input opcode_t opcode, 
     output logic [2:0] ImmSrc
 );

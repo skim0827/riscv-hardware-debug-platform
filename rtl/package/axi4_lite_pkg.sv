@@ -1,3 +1,4 @@
+/* verilator lint_off UNUSEDPARAM */
 package axi4_lite_pkg;
     // Response codes
     localparam [1:0] AXI_RESP_OKAY   = 2'b00;
@@ -51,3 +52,4 @@ package axi4_lite_pkg;
 
 
 endpackage
+/* verilator lint_on UNUSEDPARAM */

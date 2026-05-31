@@ -18,9 +18,10 @@ module memory #(
 
 logic [38:0] mem [0:WORDS - 1];
 logic [38:0] word; 
-logic [31:0] new_word; 
 logic [31:0] corrected_data;
+logic _unused_inputs;
 assign word = mem[a[8:2]];
+assign _unused_inputs = rst_n | |a[31:9];
 
 
 localparam bit [5:0] cw_pos[32] = '{
@@ -73,6 +74,33 @@ function automatic [6:0] ecc_encode(input logic [31:0] data);
     return {(^data ^ ^h), h};
 endfunction
 
+function automatic logic [31:0] merge_write_data(
+    input logic [31:0] old_word,
+    input logic [31:0] write_data,
+    input logic [1:0]  access_size,
+    input logic [1:0]  byte_addr
+);
+    logic [31:0] merged;
+    merged = old_word;
+    case (access_size)
+        2'b10: merged = write_data;
+        2'b01: begin
+            if (!byte_addr[1]) merged[15:0] = write_data[15:0];
+            else               merged[31:16] = write_data[15:0];
+        end
+        2'b00: begin
+            case (byte_addr)
+                2'b00: merged[7:0]   = write_data[7:0];
+                2'b01: merged[15:8]  = write_data[7:0];
+                2'b10: merged[23:16] = write_data[7:0];
+                2'b11: merged[31:24] = write_data[7:0];
+            endcase
+        end
+        default: merged = write_data;
+    endcase
+    return merged;
+endfunction
+
 task automatic load_init();
     if (mem_init != "") begin
         logic [31:0] raw [0:WORDS-1];
@@ -87,28 +115,10 @@ initial load_init();
 
 always_ff @(posedge clk) begin 
     if (we) begin
-
-        case (funct3[1:0])
-            2'b10 : mem[a[8:2]] <= {ecc_encode(wd), wd};
-            2'b01 : begin 
-                new_word = word[31:0];
-                if (!a[1]) new_word[15:0] = wd[15:0]; // SH 
-                else new_word[31:16] = wd[15:0];
-                mem[a[8:2]] <= {ecc_encode(new_word), new_word};
-            end 
-
-            2'b00 : begin 
-                new_word = word[31:0];
-                case (a[1:0]) // SB 
-                    2'b00 : new_word[7:0]   = wd[7:0];
-                    2'b01 : new_word[15:8]  = wd[7:0];
-                    2'b10 : new_word[23:16] = wd[7:0];
-                    2'b11 : new_word[31:24] = wd[7:0];
-                endcase 
-                mem[a[8:2]] <= {ecc_encode(new_word), new_word};
-            end 
-            default : mem[a[8:2]] <= {ecc_encode(wd), wd}; // address is multiple of 4
-        endcase 
+        mem[a[8:2]] <= {
+            ecc_encode(merge_write_data(word[31:0], wd, funct3[1:0], a[1:0])),
+            merge_write_data(word[31:0], wd, funct3[1:0], a[1:0])
+        };
     end 
 end 
 

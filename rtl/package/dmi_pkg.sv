@@ -1,4 +1,5 @@
 // RISC-V Debug Module Interface (DMI) Package v0.13.2
+/* verilator lint_off UNUSEDPARAM */
 
 package dmi_pkg;
     // DMI REGISTER ADDRESSES (7-bit) table 3.8
@@ -156,3 +157,4 @@ package dmi_pkg;
         CMDERR_OTHER = 3'h7         
     } cmderr_t;
 endpackage
+/* verilator lint_on UNUSEDPARAM */

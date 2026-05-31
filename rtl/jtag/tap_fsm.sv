@@ -12,6 +12,22 @@ module tap_fsm (
 ); 
 
 import riscv_pkg::tap_t;
+import riscv_pkg::TEST_LOGIC_RESET;
+import riscv_pkg::RUN_TEST_IDLE;
+import riscv_pkg::SELECT_DR_SCAN;
+import riscv_pkg::SELECT_IR_SCAN;
+import riscv_pkg::CAPTURE_DR;
+import riscv_pkg::CAPTURE_IR;
+import riscv_pkg::SHIFT_DR;
+import riscv_pkg::SHIFT_IR;
+import riscv_pkg::EXIT1_DR;
+import riscv_pkg::EXIT1_IR;
+import riscv_pkg::PAUSE_DR;
+import riscv_pkg::PAUSE_IR;
+import riscv_pkg::EXIT2_DR;
+import riscv_pkg::EXIT2_IR;
+import riscv_pkg::UPDATE_DR;
+import riscv_pkg::UPDATE_IR;
 tap_t state, next_state;
 
 initial state = TEST_LOGIC_RESET;
@@ -65,5 +81,4 @@ assign capture_dr = (state == CAPTURE_DR);
 assign update_dr  = (state == UPDATE_DR);
 
 endmodule
-
 

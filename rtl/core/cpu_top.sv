@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+/* verilator lint_off DECLFILENAME */
 module cpu(
     input logic clk, 
     input logic rst_n, 
@@ -28,7 +29,7 @@ module cpu(
     output logic        tmr_pc_error,
     output logic        tmr_fsm_error,
     output logic        tmr_rf_error, 
-    output logic        tmr_ir_error
+    output logic        tmr_ir_error,
 
     // AXI4-Lite master port — instruction fetch
     output logic [31:0] imem_araddr,
@@ -64,56 +65,28 @@ import riscv_pkg::*;
 // control signals 
 // ==================================================================
 logic [31:0] PCNext, pc;
-logic PCWrite, RegWrite, MemWrite, IRWrite, Zero; 
+logic PCWrite, PCWrite_gated, RegWrite, MemWrite, MemRead, IRWrite, Zero;
 logic [1:0] ResultSrc, ALUSrcB, ALUSrcA;
 logic [2:0] ImmSrc;
 
 
 
-logic Branch, PCUpdate;
 alu_control_t ALUControl;
 logic stall; // asserted while an AXI transaction is in progress.
+logic _unused_hart_reset_req;
 
 
 
 logic [31:0] instruction; 
 logic [6:0] op;
 logic [2:0] funct3;
-logic [6:0] funct7;
+logic funct7_5;
 
 assign op     = instruction[6:0];
 assign funct3 = instruction[14:12];
-assign funct7 = instruction[31:25];
+assign funct7_5 = instruction[30];
+assign _unused_hart_reset_req = hart_reset_req;
 
-
-
-// ==================================================================
-// Instruction register
-// Progbuf path has priority over normal IRWrite from memory so that
-// the injected instruction is visible at S_DECODE on the very next cycle.
-// ==================================================================
-logic [31:0] ir_0, ir_1, ir_2;
-
-always_ff @(posedge clk or negedge rst_n) begin 
-    if (!rst_n)            ir_0 <= 32'b0;
-    else if (progbuf_exec) ir_0 <= progbuf_instr;
-    else if (fetch_done)      ir_0 <= imem_rdata;
-end 
-
-always_ff @(posedge clk or negedge rst_n) begin 
-    if (!rst_n)            ir_1 <= 32'b0;
-    else if (progbuf_exec) ir_1 <= progbuf_instr;
-    else if (fetch_done)      ir_1 <= imem_rdata;
-end 
-
-always_ff @(posedge clk or negedge rst_n) begin 
-    if (!rst_n)            ir_2 <= 32'b0;
-    else if (progbuf_exec) ir_2 <= progbuf_instr;
-    else if (fetch_done)      ir_2 <= imem_rdata;
-end 
-
-assign instruction  = (ir_0 & ir_1) | (ir_0 & ir_2) | (ir_1 & ir_2);
-assign tmr_ir_error = |(ir_0 ^ ir_1) | |(ir_1 ^ ir_2);
 
 // ==================================================================
 // datapath wires 
@@ -192,10 +165,10 @@ assign dmem_rdata = extend_rdata(m_rdata, funct3, dmem_addr[1:0]);
 //                  byte 0            4'b0001
 // =============================================================================
 function automatic logic [3:0] make_wstrb (
-    input logic [2:0] f3,
+    input logic [1:0] f3,
     input logic [1:0] addr
 );
-    case (f3[1:0])
+    case (f3)
         2'b10:   return 4'b1111;
         2'b01:   return addr[1] ? 4'b1100 : 4'b0011;
         default: return 4'b0001 << addr;  // SB
@@ -206,7 +179,6 @@ logic [31:0] ALUResult;
 logic [31:0] rd1, rd2;
 logic [31:0] writeback_data;
 logic [31:0] srcA, srcB;
-logic [31:0] dbg_rdata, dbg_wdata;
 logic [31:0] ImmExt;
 
 // ==================================================================
@@ -294,6 +266,12 @@ assign PCNext = (ResultSrc == 2'b00) ? alu_result_reg :
 // =============================================================================
 assign PCWrite_gated = PCWrite && !stall;
 
+// =============================================================================
+// Instruction register TMR
+//
+// Three replicated instruction registers hold the fetched/progbuf instruction.
+// The CPU decodes the majority-voted value, while tmr_ir_error reports any
+// mismatch between replicas.
 // =============================================================================
 logic [31:0] ir_0, ir_1, ir_2;
 
@@ -464,7 +442,7 @@ assign m_awvalid = (dmem_state == DMEM_WR_ADDR) && !aw_done_r;
 assign m_awaddr  = dmem_addr;
 assign m_wvalid  = (dmem_state == DMEM_WR_ADDR) && !w_done_r;
 assign m_wdata   = mem_wdata;
-assign m_wstrb   = make_wstrb(funct3, dmem_addr[1:0]);
+assign m_wstrb   = make_wstrb(funct3[1:0], dmem_addr[1:0]);
 assign m_bready  = (dmem_state == DMEM_WR_RESP);
 assign m_arvalid = (dmem_state == DMEM_RD_ADDR);
 assign m_araddr  = dmem_addr;
@@ -488,7 +466,7 @@ control u_control(
     .Zero(Zero),
     .op(op),
     .funct3(funct3),
-    .funct7_5(funct7[5]),
+    .funct7_5(funct7_5),
 
     .RegWrite(RegWrite),
     .MemWrite(MemWrite),
@@ -561,3 +539,4 @@ tmr_regfile u_regfile(
 
 
 endmodule : cpu
+/* verilator lint_on DECLFILENAME */

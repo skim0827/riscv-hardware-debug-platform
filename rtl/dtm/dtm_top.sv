@@ -19,10 +19,12 @@
 // - DR: Variable width depending on IR selection
 // ============================================================================
 module dtm_top #(
+    /* verilator lint_off UNUSEDPARAM */
     parameter int WIDTH = 32, 
     parameter int DTMCS_WIDTH = 32, 
     parameter int DMI_WIDTH = 41, 
     parameter int IDCODE_WIDTH = 32
+    /* verilator lint_on UNUSEDPARAM */
 )(
     input logic tck, 
     input logic tdi, 
@@ -54,10 +56,10 @@ module dtm_top #(
 
 import dmi_pkg::*;
 // table 6.1 
-localparam logic [4:0] IR_IDCODE    = 5'h01;
-localparam logic [4:0] IR_DTMCS     = 5'h10;
-localparam logic [4:0] IR_DMI       = 5'h11;
-localparam logic [4:0] IR_BYPASS    = 5'h1f;
+localparam logic [4:0] DTM_IR_IDCODE = 5'h01;
+localparam logic [4:0] DTM_IR_DTMCS  = 5'h10;
+localparam logic [4:0] DTM_IR_DMI    = 5'h11;
+localparam logic [4:0] DTM_IR_BYPASS = 5'h1f;
 localparam logic [31:0] IDCODE_VALUE = 32'h12345678; // placeholder 
 // ========================================================================
 // registers 
@@ -73,7 +75,7 @@ logic [IDCODE_WIDTH-1:0] idcode_dr_data;
 logic bypass_reg; 
 
 // TDO 
-logic ir_tdo, dr_tdo; 
+logic ir_tdo;
 logic tdo_internal; 
 
 // decoded IR instruction 
@@ -89,7 +91,6 @@ typedef enum logic [1:0] {
     DMI_BUSY    = 2'b11
 } dmi_op_t; 
 
-dmi_op_t dmi_op, dmi_op_next;
 
 // IR capture value 
 assign ir_parallel_in = 5'b00001; // 0x01 ???
@@ -103,10 +104,10 @@ always_comb begin : instr_decode
     select_bypass   = 1'b0;
 
     case (ir_data) 
-        IR_IDCODE   : select_idcode = 1'b1;
-        IR_DTMCS    : select_dtmcs  = 1'b1;
-        IR_DMI      : select_dmi    = 1'b1;
-        IR_BYPASS   : select_bypass = 1'b1;
+        DTM_IR_IDCODE : select_idcode = 1'b1;
+        DTM_IR_DTMCS  : select_dtmcs  = 1'b1;
+        DTM_IR_DMI    : select_dmi    = 1'b1;
+        DTM_IR_BYPASS : select_bypass = 1'b1;
         default     : select_bypass = 1'b1;
     endcase 
 end 
@@ -213,4 +214,3 @@ always_ff @(posedge tck) begin : control_outputs
     end 
 end 
 endmodule : dtm_top 
-
