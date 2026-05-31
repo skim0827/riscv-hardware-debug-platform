@@ -83,7 +83,10 @@ localparam logic [31:0] TEST_PROG [0:3] = '{
 
 task automatic load_test_program();
     for (int i=0; i< 4; i++)
-        dut.cpu_core.u_memory.mem[i] = TEST_PROG[i];
+        dut.cpu_core.u_IMEM.mem[i] = {
+            dut.cpu_core.u_IMEM.ecc_encode(TEST_PROG[i]),
+            TEST_PROG[i]
+        };
 endtask 
 
 task automatic tck_pulse(input int n = 1);
@@ -407,7 +410,7 @@ initial begin
     begin 
         logic [31:0] x3_now; 
         @(posedge clk); #1;
-        x3_now = dut.cpu_core.u_regfile.registers[3];
+        x3_now = dut.cpu_core.u_regfile.u_rf_0.registers[3];
         `tc_check("TC0 x3 after program run (pre-halt)", x3_now, 32'h0000_0031); // x3_expected = 42 + 7 = 49
     end 
 
@@ -466,7 +469,7 @@ initial begin
         begin 
             logic [31:0] rf_x3 ; 
             @(posedge clk); #1;
-            rf_x3 = dut.cpu_core.u_regfile.registers[3];
+            rf_x3 = dut.cpu_core.u_regfile.u_rf_0.registers[3];
             `tc_check("TC5 regfile[3] direct check", rf_x3, 32'd49);
         end 
     end 
@@ -483,7 +486,7 @@ initial begin
         begin 
             logic [31:0] rf_x1;
             @(posedge clk); #1;
-            rf_x1 = dut.cpu_core.u_regfile.registers[1];
+            rf_x1 = dut.cpu_core.u_regfile.u_rf_0.registers[1];
             `tc_check("TC6 regfile[1] after write (direct)", rf_x1, 32'hDEAD_CAFE)
 
         end 

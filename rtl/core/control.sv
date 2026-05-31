@@ -10,7 +10,8 @@ import riscv_pkg::*;
     input logic funct7_5,
 
     output logic RegWrite, 
-    output logic MemWrite, 
+    output logic MemWrite,
+    output logic MemRead,
     output logic IRWrite, 
     output logic PCWrite,
     output logic [1:0] ResultSrc,
@@ -28,7 +29,9 @@ import riscv_pkg::*;
     input  logic progbuf_exec,
     output logic progbuf_done, 
 
-    output logic tmr_fsm_error
+    output logic tmr_fsm_error,
+
+    input logic stall
 );
 
 logic Branch;
@@ -58,7 +61,9 @@ tmr_main_fsm u_fsm (
     .ALUSrcB(ALUSrcB),
     .ALUSrcA(ALUSrcA),
     .ForceAdd(ForceAdd),
-    .tmr_error(tmr_fsm_error)
+    .tmr_error(tmr_fsm_error),
+    .stall  (stall),
+    .MemRead(MemRead)
 );
 
 alu_decoder u_alu(

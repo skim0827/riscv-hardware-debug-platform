@@ -40,10 +40,11 @@ package axi4_lite_pkg;
     localparam [11:0] HEALTH_TMR_PC_CNT    = 12'h008; // R: PC TMR voter mismatches
     localparam [11:0] HEALTH_TMR_FSM_CNT   = 12'h00C; // R: FSM TMR voter mismatches
     localparam [11:0] HEALTH_TMR_RF_CNT    = 12'h010; // R: regfile TMR voter mismatches
-    localparam [11:0] HEALTH_STATUS        = 12'h014; // R: live wire values of all fault signals
-    localparam [11:0] HEALTH_IRQ_MASK      = 12'h018; // R/W: which events trigger an interrupt
-    localparam [11:0] HEALTH_IRQ_STATUS    = 12'h01C; // R/W1C: which events have fired
-    localparam [11:0] HEALTH_CTRL          = 12'h020; // W: bit[0]=clear all counters
+    localparam [11:0] HEALTH_TMR_IR_CNT    = 12'h014; // R: instruction register TMR voter mismatches
+    localparam [11:0] HEALTH_STATUS        = 12'h018; // R: live wire values of all fault signals
+    localparam [11:0] HEALTH_IRQ_MASK      = 12'h01C; // R/W: which events trigger an interrupt
+    localparam [11:0] HEALTH_IRQ_STATUS    = 12'h020; // R/W1C: which events have fired
+    localparam [11:0] HEALTH_CTRL          = 12'h024; // W: bit[0]=clear all counters
 
 
 

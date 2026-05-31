@@ -1,0 +1,566 @@
+`timescale 1ns/1ps
+// =============================================================================
+// soc_top.sv — Phase 2 SoC integration
+//
+// ARCHITECTURE
+//
+//                         ┌─────────────────────────────────────────┐
+//   JTAG debugger         │              soc_top                    │
+//   tck/tms/tdi/tdo ──── │  tap_fsm                                │
+//                         │      │                                  │
+//                         │  dtm_top   (tck domain)                 │
+//                         │      │ DMI                              │
+//                         │  dmi_cdc_bridge  (tck ↔ clk)           │
+//                         │      │ DMI (clk domain)                 │
+//                         │  debug_module                           │
+//                         │      │ hart interface                   │
+//                         │  ┌───────────────────────┐              │
+//                         │  │  cpu                  │              │
+//                         │  │  (AXI4-Lite master)   │              │
+//                         │  └───────┬───────┬───────┘              │
+//                         │          │IMEM   │data                  │
+//                         │    (direct)    crossbar                 │
+//                         │          │       │                      │
+//                         │       IMEM    ┌──┴──┬──────┬────────┐   │
+//                         │      slave   DMEM UART Timer Health  │   │
+//                         │              slave slave slave slave  │   │
+//                         │                │         │       │   │   │
+//                         │           corrected   timer_irq  │   │   │
+//                         │           detected    wdt_reset ─┤   │   │
+//                         │                └──────────────────┘   │   │
+//                         └─────────────────────────────────────────┘
+//                                                        uart_tx ──→ pin
+//
+// KEY DESIGN DECISIONS
+//
+// IMEM bypasses the crossbar.
+//   The CPU has two separate AXI master ports: one for instruction fetch
+//   (imem_*) and one for data (m_*). IMEM connects directly to the fetch
+//   port. The data crossbar only handles {DMEM, UART, Timer, Health}.
+//   The SLV_IMEM slot on the crossbar is wired to a null slave that
+//   returns DECERR — correct behaviour if firmware accidentally stores
+//   to the instruction memory address range.
+//
+// Watchdog drives cpu_rst_n.
+//   wdt_reset from the timer slave is ANDed with the external rst_n.
+//   When the watchdog fires, the CPU resets without affecting the debug
+//   stack (the debug modules remain operational, which is the standard
+//   behaviour for a non-destructive watchdog reset).
+//
+// ECC signals bypass the CPU.
+//   In Phase 1, imem_corrected/detected were CPU output ports (they came
+//   from memory instances inside the CPU). In Phase 2, the memory slaves
+//   live in soc_top. The corrected/detected wires go directly from the
+//   memory slaves to the health slave — the CPU is not on that path.
+//
+// IRQs are wired but not yet connected to the CPU.
+//   timer_irq and health_irq are produced by the timer and health slaves.
+//   They are declared as wires here. Phase 3 adds a minimal interrupt
+//   controller and connects them to the CPU. For now they are outputs of
+//   soc_top so they can be probed on the FPGA with an ILA.
+// =============================================================================
+
+module soc_top (
+    input  logic clk,
+    input logic rst_btn,      // active HIGH from button
+
+    // JTAG debug port
+    input  logic tck,
+    input  logic tms,
+    input  logic tdi,
+    output logic tdo,
+
+    // UART TX
+    output logic uart_tx,
+
+    // Fault telemetry — optional: route to FPGA LEDs or ILA for visibility
+    output logic imem_corrected_o,
+    output logic imem_detected_o,
+    output logic dmem_corrected_o,
+    output logic dmem_detected_o,
+    output logic tmr_pc_error_o,
+    output logic tmr_fsm_error_o,
+    output logic tmr_rf_error_o,
+    output logic tmr_ir_error_o,
+
+    // Pending IRQs — not yet connected to CPU, available for ILA probing
+    output logic timer_irq_o,
+    output logic health_irq_o
+);
+
+import dmi_pkg::*;
+import riscv_pkg::*;
+import axi4_lite_pkg::*;
+
+// arty A7
+logic rst_n;
+assign rst_n = ~rst_btn;
+
+// TAP control signals (tck domain)
+logic capture_dr, shift_dr, update_dr;
+logic capture_ir, shift_ir, update_ir;
+
+// DMI bus — tck domain (DTM outputs)
+logic [6:0]  tck_dmi_addr;
+logic [31:0] tck_dmi_wdata;
+logic        tck_dmi_we;
+logic        tck_dmi_re;
+logic [31:0] tck_dmi_rdata;
+
+// DMI bus — clk domain (DM inputs, from CDC bridge)
+logic [6:0]  clk_dmi_addr;
+logic [31:0] clk_dmi_wdata;
+logic [1:0]  clk_dmi_op;
+logic        clk_dmi_we;
+logic        clk_dmi_re;
+logic        clk_dmi_valid;
+logic [31:0] clk_dmi_rdata;
+
+// DTMCS feedback (tck domain)
+logic        dtmcs_dmihardreset;
+logic        dtmcs_dmireset;
+logic [2:0]  dtmcs_idle;
+logic [1:0]  dtmcs_dmistat;
+logic [5:0]  dtmcs_abits;
+
+assign dtmcs_idle    = 3'b001;
+assign dtmcs_dmistat = 2'b00;
+assign dtmcs_abits   = 6'd7;
+
+// Hart interface (clk domain)
+logic        hart_halted;
+logic        hart_halt_req;
+logic        hart_resume_req;
+logic        hart_reset_req;
+logic [31:0] hart_regfile_rdata;
+logic [31:0] hart_regfile_wdata;
+logic [4:0]  hart_regfile_addr;
+logic        hart_regfile_we;
+logic [31:0] hart_pc_rdata;
+logic [31:0] hart_pc_wdata;
+logic        hart_pc_we;
+
+// Program buffer interface (clk domain)
+logic [31:0] progbuf_instr;
+logic        progbuf_exec;
+logic        progbuf_done;
+logic        progbuf_exception;
+
+
+// Fault telemetry wires
+logic imem_corrected, imem_detected;  // from IMEM slave
+logic dmem_corrected, dmem_detected;  // from DMEM slave
+logic tmr_pc_error, tmr_fsm_error, tmr_rf_error, tmr_ir_error; // from CPU
+
+assign imem_corrected_o = imem_corrected;
+assign imem_detected_o  = imem_detected;
+assign dmem_corrected_o = dmem_corrected;
+assign dmem_detected_o  = dmem_detected;
+assign tmr_pc_error_o   = tmr_pc_error;
+assign tmr_fsm_error_o  = tmr_fsm_error;
+assign tmr_rf_error_o   = tmr_rf_error;
+assign tmr_ir_error_o   = tmr_ir_error;
+
+// =============================================================================
+// Watchdog reset
+//
+// wdt_reset from the timer slave resets the CPU independently of the
+// external rst_n. The debug stack (tap, dtm, cdc, dm) is NOT reset by
+// the watchdog — a debugger attached over JTAG remains connected through
+// a watchdog event.
+//
+// cpu_rst_n: active-low reset for the CPU only.
+// rst_n:     active-low reset for everything else (full system reset).
+// =============================================================================
+logic wdt_reset;
+logic cpu_rst_n;
+
+assign cpu_rst_n = rst_n & ~wdt_reset;
+
+// =============================================================================
+// IRQ wires (not yet connected to CPU — Phase 3)
+// =============================================================================
+logic timer_irq;
+logic health_irq;
+
+assign timer_irq_o = timer_irq;
+assign health_irq_o = health_irq;
+
+// =============================================================================
+// CPU AXI4-Lite master ports
+//
+// Two separate buses:
+//   imem_*  — instruction fetch, read-only, goes direct to IMEM slave
+//   cpu_m_* — data access, read/write, goes through the crossbar
+// =============================================================================
+
+// Instruction fetch (IMEM direct)
+logic [31:0] imem_araddr;
+logic        imem_arvalid;
+logic        imem_arready;
+logic [31:0] imem_rdata;
+logic [1:0]  imem_rresp;
+logic        imem_rvalid;
+logic        imem_rready;
+
+// Data bus (crossbar master)
+logic [31:0] cpu_m_awaddr;  logic cpu_m_awvalid; logic cpu_m_awready;
+logic [31:0] cpu_m_wdata;   logic [3:0] cpu_m_wstrb; logic cpu_m_wvalid; logic cpu_m_wready;
+logic [1:0]  cpu_m_bresp;   logic cpu_m_bvalid;  logic cpu_m_bready;
+logic [31:0] cpu_m_araddr;  logic cpu_m_arvalid; logic cpu_m_arready;
+logic [31:0] cpu_m_rdata;   logic [1:0] cpu_m_rresp; logic cpu_m_rvalid; logic cpu_m_rready;
+
+// =============================================================================
+// AXI4-Lite crossbar slave port arrays
+// =============================================================================
+logic [31:0] s_awaddr  [NUM_SLAVES];
+logic        s_awvalid [NUM_SLAVES];
+logic        s_awready [NUM_SLAVES];
+logic [31:0] s_wdata   [NUM_SLAVES];
+logic [3:0]  s_wstrb   [NUM_SLAVES];
+logic        s_wvalid  [NUM_SLAVES];
+logic        s_wready  [NUM_SLAVES];
+logic [1:0]  s_bresp   [NUM_SLAVES];
+logic        s_bvalid  [NUM_SLAVES];
+logic        s_bready  [NUM_SLAVES];
+logic [31:0] s_araddr  [NUM_SLAVES];
+logic        s_arvalid [NUM_SLAVES];
+logic        s_arready [NUM_SLAVES];
+logic [31:0] s_rdata   [NUM_SLAVES];
+logic [1:0]  s_rresp   [NUM_SLAVES];
+logic        s_rvalid  [NUM_SLAVES];
+logic        s_rready  [NUM_SLAVES];
+
+
+
+tap_fsm tap_controller (
+    .tck       (tck),
+    .tms       (tms),
+    .capture_ir(capture_ir),
+    .shift_ir  (shift_ir),
+    .update_ir (update_ir),
+    .capture_dr(capture_dr),
+    .shift_dr  (shift_dr),
+    .update_dr (update_dr)
+);
+
+dtm_top #(
+    .WIDTH      (32),
+    .DTMCS_WIDTH(32),
+    .DMI_WIDTH  (41),
+    .IDCODE_WIDTH(32)
+) u_dtm (
+    .tck               (tck),
+    .tdi               (tdi),
+    .tdo               (tdo),
+    .capture_ir        (capture_ir),
+    .shift_ir          (shift_ir),
+    .update_ir         (update_ir),
+    .capture_dr        (capture_dr),
+    .shift_dr          (shift_dr),
+    .update_dr         (update_dr),
+    .dmi_addr          (tck_dmi_addr),
+    .dmi_wdata         (tck_dmi_wdata),
+    .dmi_we            (tck_dmi_we),
+    .dmi_re            (tck_dmi_re),
+    .dmi_rdata         (tck_dmi_rdata),
+    .dtmcs_dmihardreset(dtmcs_dmihardreset),
+    .dtmcs_dmireset    (dtmcs_dmireset),
+    .dtmcs_idle        (dtmcs_idle),
+    .dtmcs_dmistat     (dtmcs_dmistat),
+    .dtmcs_abits       (dtmcs_abits)
+);
+
+// =============================================================================
+// DMI CDC bridge — tck to clk
+// =============================================================================
+dmi_cdc_bridge u_cdc (
+    .tck          (tck),
+    .clk          (clk),
+    .rst_n        (rst_n),
+    .tck_dmi_addr (tck_dmi_addr),
+    .tck_dmi_wdata(tck_dmi_wdata),
+    .tck_dmi_we   (tck_dmi_we),
+    .tck_dmi_re   (tck_dmi_re),
+    .tck_dmi_rdata(tck_dmi_rdata),
+    .clk_dmi_addr (clk_dmi_addr),
+    .clk_dmi_wdata(clk_dmi_wdata),
+    .clk_dmi_we   (clk_dmi_we),
+    .clk_dmi_re   (clk_dmi_re),
+    .clk_dmi_valid(clk_dmi_valid),
+    .clk_dmi_rdata(clk_dmi_rdata)
+);
+
+// =============================================================================
+// Debug Module (clk domain, unchanged)
+// =============================================================================
+debug_module u_dm (
+    .clk               (clk),
+    .rst_n             (rst_n),
+    .dmi_addr          (clk_dmi_addr),
+    .dmi_wdata         (clk_dmi_wdata),
+    .dmi_we            (clk_dmi_we),
+    .dmi_re            (clk_dmi_re),
+    .dmi_rdata         (clk_dmi_rdata),
+    .dmi_valid         (clk_dmi_valid),
+    .hart_halted       (hart_halted),
+    .hart_halt_req     (hart_halt_req),
+    .hart_resume_req   (hart_resume_req),
+    .hart_reset_req    (hart_reset_req),
+    .hart_regfile_rdata(hart_regfile_rdata),
+    .hart_regfile_wdata(hart_regfile_wdata),
+    .hart_regfile_addr (hart_regfile_addr),
+    .hart_regfile_we   (hart_regfile_we),
+    .hart_pc_rdata     (hart_pc_rdata),
+    .hart_pc_wdata     (hart_pc_wdata),
+    .hart_pc_we        (hart_pc_we),
+    .progbuf_instr     (progbuf_instr),
+    .progbuf_exec      (progbuf_exec),
+    .progbuf_done      (progbuf_done),
+    .progbuf_exception (progbuf_exception)
+);
+
+// =============================================================================
+// CPU core
+//
+// rst_n uses cpu_rst_n so the watchdog can reset the CPU independently.
+// The AXI ports replace the direct memory connections that existed in Phase 1.
+// =============================================================================
+cpu u_cpu (
+    .clk               (clk),
+    .rst_n             (cpu_rst_n), 
+
+    // Hart interface
+    .hart_halt_req     (hart_halt_req),
+    .hart_resume_req   (hart_resume_req),
+    .hart_reset_req    (1'b0),             // single-hart system, tied off
+    .hart_halted       (hart_halted),
+    .hart_regfile_addr (hart_regfile_addr),
+    .hart_regfile_wdata(hart_regfile_wdata),
+    .hart_regfile_we   (hart_regfile_we),
+    .hart_regfile_rdata(hart_regfile_rdata),
+    .hart_pc_wdata     (hart_pc_wdata),
+    .hart_pc_we        (hart_pc_we),
+    .hart_pc_rdata     (hart_pc_rdata),
+
+    // Program buffer
+    .progbuf_instr     (progbuf_instr),
+    .progbuf_exec      (progbuf_exec),
+    .progbuf_done      (progbuf_done),
+    .progbuf_exception (progbuf_exception),
+
+    // TMR telemetry
+    .tmr_pc_error      (tmr_pc_error),
+    .tmr_fsm_error     (tmr_fsm_error),
+    .tmr_rf_error      (tmr_rf_error),
+    .tmr_ir_error      (tmr_ir_error),
+
+    // AXI master — instruction fetch (direct to IMEM slave, bypasses crossbar)
+    .imem_araddr       (imem_araddr),
+    .imem_arvalid      (imem_arvalid),
+    .imem_arready      (imem_arready),
+    .imem_rdata        (imem_rdata),
+    .imem_rresp        (imem_rresp),
+    .imem_rvalid       (imem_rvalid),
+    .imem_rready       (imem_rready),
+
+    // AXI master — data bus (through crossbar)
+    .m_awaddr          (cpu_m_awaddr),
+    .m_awvalid         (cpu_m_awvalid),
+    .m_awready         (cpu_m_awready),
+    .m_wdata           (cpu_m_wdata),
+    .m_wstrb           (cpu_m_wstrb),
+    .m_wvalid          (cpu_m_wvalid),
+    .m_wready          (cpu_m_wready),
+    .m_bresp           (cpu_m_bresp),
+    .m_bvalid          (cpu_m_bvalid),
+    .m_bready          (cpu_m_bready),
+    .m_araddr          (cpu_m_araddr),
+    .m_arvalid         (cpu_m_arvalid),
+    .m_arready         (cpu_m_awready),    // shared ready from crossbar
+    .m_rdata           (cpu_m_rdata),
+    .m_rresp           (cpu_m_rresp),
+    .m_rvalid          (cpu_m_rvalid),
+    .m_rready          (cpu_m_rready)
+);
+
+// =============================================================================
+// AXI4-Lite crossbar
+//
+// One master (CPU data bus), five slave slots.
+//   SLV_IMEM   (0) → null slave  (IMEM not data-accessible, returns DECERR)
+//   SLV_DMEM   (1) → DMEM slave
+//   SLV_UART   (2) → UART slave
+//   SLV_TIMER  (3) → Timer/WDT slave
+//   SLV_HEALTH (4) → Health monitor slave
+// =============================================================================
+axi4_lite_crossbar u_crossbar (
+    .clk      (clk),
+    .rst_n    (rst_n),
+
+    // Master port — CPU data bus
+    .m_awaddr (cpu_m_awaddr),
+    .m_awvalid(cpu_m_awvalid),
+    .m_awready(cpu_m_awready),
+    .m_wdata  (cpu_m_wdata),
+    .m_wstrb  (cpu_m_wstrb),
+    .m_wvalid (cpu_m_wvalid),
+    .m_wready (cpu_m_wready),
+    .m_bresp  (cpu_m_bresp),
+    .m_bvalid (cpu_m_bvalid),
+    .m_bready (cpu_m_bready),
+    .m_araddr (cpu_m_araddr),
+    .m_arvalid(cpu_m_arvalid),
+    .m_arready(cpu_m_arready),
+    .m_rdata  (cpu_m_rdata),
+    .m_rresp  (cpu_m_rresp),
+    .m_rvalid (cpu_m_rvalid),
+    .m_rready (cpu_m_rready),
+
+    // Slave port arrays — connected to individual slaves below
+    .s_awaddr (s_awaddr),   .s_awvalid(s_awvalid), .s_awready(s_awready),
+    .s_wdata  (s_wdata),    .s_wstrb  (s_wstrb),
+    .s_wvalid (s_wvalid),   .s_wready (s_wready),
+    .s_bresp  (s_bresp),    .s_bvalid (s_bvalid),  .s_bready (s_bready),
+    .s_araddr (s_araddr),   .s_arvalid(s_arvalid), .s_arready(s_arready),
+    .s_rdata  (s_rdata),    .s_rresp  (s_rresp),
+    .s_rvalid (s_rvalid),   .s_rready (s_rready)
+);
+
+// =============================================================================
+// SLV_IMEM (slot 0) — null slave
+// =============================================================================
+axi4_lite_null_slave u_null (
+    .clk     (clk),
+    .rst_n   (rst_n),
+    .s_awaddr(s_awaddr [SLV_IMEM]), .s_awvalid(s_awvalid[SLV_IMEM]), .s_awready(s_awready[SLV_IMEM]),
+    .s_wdata (s_wdata  [SLV_IMEM]), .s_wstrb  (s_wstrb  [SLV_IMEM]),
+    .s_wvalid(s_wvalid [SLV_IMEM]), .s_wready (s_wready [SLV_IMEM]),
+    .s_bresp (s_bresp  [SLV_IMEM]), .s_bvalid (s_bvalid [SLV_IMEM]), .s_bready(s_bready[SLV_IMEM]),
+    .s_araddr(s_araddr [SLV_IMEM]), .s_arvalid(s_arvalid[SLV_IMEM]), .s_arready(s_arready[SLV_IMEM]),
+    .s_rdata (s_rdata  [SLV_IMEM]), .s_rresp  (s_rresp  [SLV_IMEM]),
+    .s_rvalid(s_rvalid [SLV_IMEM]), .s_rready (s_rready [SLV_IMEM])
+);
+
+// =============================================================================
+// SLV_IMEM_DIRECT — IMEM slave (instruction fetch, bypasses crossbar)
+//
+// Connected directly to the CPU's imem_* ports.
+// This is the instruction store. The CPU fetches from here every S_FETCH.
+// ECC corrected/detected go directly to the health slave
+// =============================================================================
+axi4_lite_mem_slave #(
+    .WORDS   (128),
+    .MEM_INIT("../../sw/fpga_hello/fpga_hello.memh")
+) u_imem (
+    .clk      (clk),
+    .rst_n    (rst_n),
+
+    // IMEM is read-only from the CPU side.
+    .s_awaddr (32'b0),  .s_awvalid(1'b0),  .s_awready(/* open */),
+    .s_wdata  (32'b0),  .s_wstrb  (4'b0),  .s_wvalid (1'b0),  .s_wready(/* open */),
+    .s_bresp  (/* open */), .s_bvalid(/* open */), .s_bready(1'b0),
+
+    // Read — connected to CPU instruction fetch port
+    .s_araddr (imem_araddr),
+    .s_arvalid(imem_arvalid),
+    .s_arready(imem_arready),
+    .s_rdata  (imem_rdata),
+    .s_rresp  (imem_rresp),
+    .s_rvalid (imem_rvalid),
+    .s_rready (imem_rready),
+
+    // ECC telemetry : health slave directly
+    .corrected(imem_corrected),
+    .detected (imem_detected)
+);
+
+// =============================================================================
+// SLV_DMEM (slot 1) — DMEM slave (through crossbar)
+// =============================================================================
+axi4_lite_mem_slave #(
+    .WORDS   (128),
+    .MEM_INIT("../tb/test_dmem.hex")
+) u_dmem (
+    .clk      (clk),
+    .rst_n    (rst_n),
+    .s_awaddr (s_awaddr [SLV_DMEM]), .s_awvalid(s_awvalid[SLV_DMEM]), .s_awready(s_awready[SLV_DMEM]),
+    .s_wdata  (s_wdata  [SLV_DMEM]), .s_wstrb  (s_wstrb  [SLV_DMEM]),
+    .s_wvalid (s_wvalid [SLV_DMEM]), .s_wready (s_wready [SLV_DMEM]),
+    .s_bresp  (s_bresp  [SLV_DMEM]), .s_bvalid (s_bvalid [SLV_DMEM]), .s_bready(s_bready[SLV_DMEM]),
+    .s_araddr (s_araddr [SLV_DMEM]), .s_arvalid(s_arvalid[SLV_DMEM]), .s_arready(s_arready[SLV_DMEM]),
+    .s_rdata  (s_rdata  [SLV_DMEM]), .s_rresp  (s_rresp  [SLV_DMEM]),
+    .s_rvalid (s_rvalid [SLV_DMEM]), .s_rready (s_rready [SLV_DMEM]),
+    .corrected(dmem_corrected),
+    .detected (dmem_detected)
+);
+
+// =============================================================================
+// SLV_UART (slot 2) — UART TX slave (through crossbar)
+//
+// CPU writes a byte to 0x2000_0000 → character appears on uart_tx pin.
+// Address range: 0x2000_0000 – 0x2000_0FFF
+// =============================================================================
+axi4_lite_uart_slave #(
+    .CLK_FREQ (100_000_000), // for Arty A7
+    .BAUD_RATE(115_200)
+) u_uart (
+    .clk        (clk),
+    .rst_n      (rst_n),
+    .s_awaddr   (s_awaddr [SLV_UART]), .s_awvalid(s_awvalid[SLV_UART]), .s_awready(s_awready[SLV_UART]),
+    .s_wdata    (s_wdata  [SLV_UART]), .s_wstrb  (s_wstrb  [SLV_UART]),
+    .s_wvalid   (s_wvalid [SLV_UART]), .s_wready (s_wready [SLV_UART]),
+    .s_bresp    (s_bresp  [SLV_UART]), .s_bvalid (s_bvalid [SLV_UART]), .s_bready(s_bready[SLV_UART]),
+    .s_araddr   (s_araddr [SLV_UART]), .s_arvalid(s_arvalid[SLV_UART]), .s_arready(s_arready[SLV_UART]),
+    .s_rdata    (s_rdata  [SLV_UART]), .s_rresp  (s_rresp  [SLV_UART]),
+    .s_rvalid   (s_rvalid [SLV_UART]), .s_rready (s_rready [SLV_UART]),
+    .uart_tx_pin(uart_tx)
+);
+
+// =============================================================================
+// SLV_TIMER (slot 3) — Timer / Watchdog slave (through crossbar)
+// =============================================================================
+axi4_lite_timer_slave u_timer (
+    .clk      (clk),
+    .rst_n    (rst_n),
+    .s_awaddr (s_awaddr [SLV_TIMER]), .s_awvalid(s_awvalid[SLV_TIMER]), .s_awready(s_awready[SLV_TIMER]),
+    .s_wdata  (s_wdata  [SLV_TIMER]), .s_wstrb  (s_wstrb  [SLV_TIMER]),
+    .s_wvalid (s_wvalid [SLV_TIMER]), .s_wready (s_wready [SLV_TIMER]),
+    .s_bresp  (s_bresp  [SLV_TIMER]), .s_bvalid (s_bvalid [SLV_TIMER]), .s_bready(s_bready[SLV_TIMER]),
+    .s_araddr (s_araddr [SLV_TIMER]), .s_arvalid(s_arvalid[SLV_TIMER]), .s_arready(s_arready[SLV_TIMER]),
+    .s_rdata  (s_rdata  [SLV_TIMER]), .s_rresp  (s_rresp  [SLV_TIMER]),
+    .s_rvalid (s_rvalid [SLV_TIMER]), .s_rready (s_rready [SLV_TIMER]),
+    .timer_irq(timer_irq),
+    .wdt_reset(wdt_reset)
+);
+
+// =============================================================================
+// SLV_HEALTH (slot 4) — Health monitor slave (through crossbar)
+// =============================================================================
+axi4_lite_health_slave u_health (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    .s_awaddr       (s_awaddr [SLV_HEALTH]), .s_awvalid(s_awvalid[SLV_HEALTH]), .s_awready(s_awready[SLV_HEALTH]),
+    .s_wdata        (s_wdata  [SLV_HEALTH]), .s_wstrb  (s_wstrb  [SLV_HEALTH]),
+    .s_wvalid       (s_wvalid [SLV_HEALTH]), .s_wready (s_wready [SLV_HEALTH]),
+    .s_bresp        (s_bresp  [SLV_HEALTH]), .s_bvalid (s_bvalid [SLV_HEALTH]), .s_bready(s_bready[SLV_HEALTH]),
+    .s_araddr       (s_araddr [SLV_HEALTH]), .s_arvalid(s_arvalid[SLV_HEALTH]), .s_arready(s_arready[SLV_HEALTH]),
+    .s_rdata        (s_rdata  [SLV_HEALTH]), .s_rresp  (s_rresp  [SLV_HEALTH]),
+    .s_rvalid       (s_rvalid [SLV_HEALTH]), .s_rready (s_rready [SLV_HEALTH]),
+
+    // ECC signals from memory slaves : direct wires, do not pass through CPU
+    .imem_corrected (imem_corrected),
+    .imem_detected  (imem_detected),
+    .dmem_corrected (dmem_corrected),
+    .dmem_detected  (dmem_detected),
+
+    // TMR signals from CPU
+    .tmr_pc_error   (tmr_pc_error),
+    .tmr_fsm_error  (tmr_fsm_error),
+    .tmr_rf_error   (tmr_rf_error),
+    .tmr_ir_error   (tmr_ir_error),
+
+    .health_irq     (health_irq)
+);
+
+endmodule : soc_top

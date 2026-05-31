@@ -13,7 +13,6 @@ RTL_PKGS = \
 	../rtl/package/axi4_lite_pkg.sv
 
 RTL_CORE = \
-	../rtl/package/riscv_pkg.sv \
 	../rtl/core/program_counter.sv \
 	../rtl/core/regfile.sv \
 	../rtl/core/main_fsm.sv \
@@ -47,6 +46,7 @@ RTL_SYSTEM = \
 	../rtl/debug/debug_module.sv \
 	../rtl/jtag/tap_fsm.sv \
 	../rtl/dtm/dtm_top.sv \
+	../rtl/peripheral/health_monitor.sv \
 	../rtl/system/system_top.sv
 
 RTL_AXI_MEM = \
@@ -64,10 +64,16 @@ RTL_AXI_TIMER = \
 	../rtl/peripheral/timer_wdt.sv \
 	../rtl/peripheral/axi4_lite_timer_slave.sv
 
-TB_SRCS_tb_fault_inject          = $(RTL_CORE)
+RTL_AXI_HEALTH = \
+	../rtl/package/axi4_lite_pkg.sv \
+	../rtl/peripheral/health_monitor.sv \
+	../rtl/peripheral/axi4_lite_health_slave.sv
+
+TB_SRCS_tb_fault_inject          = ../rtl/package/riscv_pkg.sv $(RTL_CORE)
 TB_SRCS_tb_axi4_lite_mem_slave   = $(RTL_AXI_MEM)
 TB_SRCS_tb_axi4_lite_uart_slave  = $(RTL_AXI_UART)
 TB_SRCS_tb_axi4_lite_timer_slave = $(RTL_AXI_TIMER)
+TB_SRCS_tb_axi4_lite_health_slave = $(RTL_AXI_HEALTH)
 TB_SRCS_tb_debug_module          = $(RTL_DEBUG)
 TB_SRCS_tb_cdc_cmd_bridge        = ../rtl/debug/dmi_cdc_bridge.sv
 TB_SRCS_tb_progbuf               = ../rtl/debug/progbuf.sv

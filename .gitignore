@@ -3,6 +3,7 @@ obj_dir/
 
 .vscode/
 *.dat
+sim/sim_baseline
 
 # Synthesis generated files
 synth/system_flat.v

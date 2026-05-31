@@ -1,181 +1,168 @@
 # RISC-V Hardware Debug Platform
 
-A fully functional 32-bit RISC-V processor with external debugging capabilities, designed to demonstrate hardware architecture principles and RISC-V debugging standards (v0.13.2).
+A small RV32I hardware platform focused on reliability, debug visibility, and
+SoC integration. The project starts with a hardened compute tile, then builds it
+into an AXI4-Lite based system with memory-mapped peripherals and fault
+telemetry.
 
-## Overview
+## Project Flow
 
-This project implements a complete debugging platform featuring:
+### Phase 1 - Hardened Compute Tile
 
-- **32-bit RISC-V RV32I Processor** - A multi-cycle processor supporting 32 base instructions
-- **JTAG Interface** - IEEE 1149.1 compliant Test Access Port for external debugging
-- **Debug Transport Module (DTM)** - Converts JTAG sequences into Debug Module Interface (DMI) transactions
-- **Debug Module** - Full RISC-V external debug module with register control, abstract commands, and data registers
-- **Comprehensive Test Suite** - Simulation-based verification with coverage analysis
-### Complete System Diagram
-![complete system diagram](docs/images/flow_overview.png)
+Goal: prove that resilience mechanisms work before adding more system features.
 
-## Features
+Implemented:
 
-### Processor Architecture
-- **Multi-cycle Execution**: Each instruction completes through multiple sequential cycles
-- **RV32I Base ISA**: 32 instructions covering R, I, S, B, J, and U-type formats
-- **32 × 32-bit General Purpose Registers**
-- **Simple memory subsystem** for instruction and data storage
-- **Debuggable**: Halt, step, and register inspection through JTAG
+- RV32I multi-cycle CPU core
+- ECC-protected instruction and data memory
+- TMR-protected PC, register-file/control state paths
+- fault telemetry outputs for ECC and TMR events
+- directed fault-injection testbench
 
-### Debug Capabilities
-- **Halt/Resume**: Stop processor execution for inspection
-- **Register Access**: Read/write CPU registers remotely
-- **Program Counter Control**: Modify execution flow
-- **Program Buffer**: Execute debug programmes without modifying main memory
-- **Status Monitoring**: Track hart state, instruction completion, and debug readiness
+In progress:
 
-## Quick Start
+- automated ISS-to-RTL trace comparison
+- more complete fault campaign reporting
 
-### Prerequisites
+Phase 1 intentionally stops here. The point is not to keep adding CPU features;
+the point is to demonstrate correction, detection, and masking.
 
-Before building, ensure you have installed:
-- **Verilator** (>= 5.0) - For SystemVerilog simulation
-- **Make** - Build automation
-- **C++ compiler** - For compiled Verilator output
+### Phase 2 - SoC Integration
 
-**Installation** (Ubuntu/Debian):
-```bash
-sudo apt-get install verilator make g++
-```
+Goal: turn the CPU tile into a small system.
 
-**Verification**:
-```bash
-verilator --version
-```
+Implemented or partially implemented:
 
-### Building
+- AXI4-Lite data crossbar
+- direct IMEM instruction-fetch path
+- DMEM AXI4-Lite slave
+- UART TX AXI4-Lite slave
+- Timer/watchdog AXI4-Lite slave
+- Health monitor AXI4-Lite slave
+- memory map package
+- JTAG/DTM/Debug Module path integrated at top level
 
-Clone the repository:
-```bash
-git clone https://github.com/skim0827/riscv-hardware-debug-platform.git
-cd riscv-hardware-debug-platform
-```
+Still in progress:
 
-### Running Tests
+- full top-level SoC signoff
+- CPU interrupt connection
+- DMA register block
+- firmware-style peripheral access tests
 
-Test the entire system with:
-```bash
-make coverage suite=dtm tb=tb_dtm_top
-```
+## Architecture Summary
 
-Test individual components:
-```bash
-# Test the ALU
-make coverage suite=core tb=tb_alu
+The CPU uses separate instruction and data interfaces:
 
-# Test the Debug Module
-make coverage suite=debug tb=tb_debug_module
+- instruction fetch goes directly to IMEM
+- data reads/writes go through an AXI4-Lite crossbar
 
-# Test JTAG  
-make coverage suite=jtag tb=tb_tap_fsm
-```
-
-### Viewing Results
-
-Display coverage report:
-```bash
-make coverage_report
-```
-
-View uncovered lines:
-```bash
-make coverage_view
-```
-
-Clean build artefacts:
-```bash
-make clean
-```
-
-## Project Structure
+The current SoC top level is `rtl/system/soc_top.sv`.
 
 ```
-riscv-hardware-debug-platform/
-├── README.md                 # This file
-├── Makefile                  # Build automation
-├── filelist.f                # Verilator file list
-├── rtl/                      # RTL design files
-│   ├── core/                 # CPU core implementation
-│   ├── debug/                # Debug module
-│   ├── dtm/                  # JTAG Debug Transport Module
-│   ├── jtag/                 # JTAG TAP controller
-│   ├── package/              # SystemVerilog packages
-│   └── system/               # System integration
-├── tb/                       # Test benches
-│   ├── core/                 # CPU core tests
-│   ├── debug/                # Debug module tests
-│   ├── dtm/                  # DTM tests
-│   ├── jtag/                 # JTAG tests
-│   └── system/               # Integration tests
-└── docs/                     # Documentation
-    ├── ARCHITECTURE.md       # System architecture
-    ├── MODULES.md            # Module reference
-    ├── TESTING.md            # Testing guide
-    └── DEBUG_PROTOCOL.md     # Debug specification
+JTAG -> TAP -> DTM -> CDC -> Debug Module
+                              |
+                              v
+                         RV32I CPU
+                         /       \
+                  IMEM direct   AXI4-Lite data crossbar
+                                  |    |      |       |
+                                DMEM  UART  Timer   Health
 ```
-## Key Specifications
 
-| Aspect | Specification |
-|--------|---------------|
-| **ISA** | RV32I (RISC-V 32-bit Base Integer) |
-| **Pipeline** | 5-stage |
-| **Registers** | 32 × 32-bit GPRs |
-| **Debug Interface** | JTAG (IEEE 1149.1) + DMI |
-| **Debug Spec** | RISC-V Debug v0.13.2 |
-| **Simulation** | Verilator |
-| **HDL** | SystemVerilog |
+Fault telemetry is system-visible:
+
+- ECC correction count
+- ECC detection count
+- TMR disagreement counts
+- live fault status
+- latched interrupt status
 
 ## Documentation
 
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design overview and component diagrams
-- **[MODULES.md](docs/MODULES.md)** - Detailed module documentation and signal references
-- **[TESTING.md](docs/TESTING.md)** - Simulation execution and test methodology
+Start here:
 
+- [Documentation Index](docs/README.md)
+- [Phase 1 - Hardened Compute Tile](docs/phase1_hardened_compute_tile.md)
+- [Phase 2 - SoC Integration](docs/phase2_soc_integration.md)
+- [Memory Map](docs/memory_map.md)
+- [Verification Status](docs/verification_status.md)
 
+## Repository Layout
 
-## Development
+```text
+rtl/
+  core/        RV32I CPU, ECC memory, TMR blocks
+  bus/         AXI4-Lite crossbar and null slave
+  peripheral/ AXI4-Lite memory, UART, timer/WDT, health monitor
+  debug/       Debug Module, program buffer, DMI CDC bridge
+  dtm/         Debug Transport Module
+  jtag/        JTAG TAP controller
+  package/     shared SystemVerilog packages
+  system/      SoC top level
 
-### Running a Simple Test
+tb/
+  core/        CPU and fault-injection tests
+  bus/         AXI4-Lite bus/peripheral tests
+  peripheral/ UART, timer, health monitor tests
+  debug/       Debug module tests
+  dtm/         JTAG/DTM tests
+  system/      integration tests
 
-```bash
-# Build and run DTM test with coverage
-make coverage suite=dtm tb=tb_dtm_top
+sim/
+  src/         C ISS baseline and space-hardened models
+  tests/       ISS hex programs
+  results/     analysis outputs
 
-# View the generated waveform (if available)
-gtkwave dump.vcd
+docs/          concise project documentation
 ```
 
-### Understanding Coverage
+## Running Tests
 
-Coverage reports show which lines of code were executed during testing:
-- **Covered**: Executed at least once
-- **Uncovered**: Never executed during simulation
+Prerequisites:
 
-Improve coverage by writing more comprehensive tests in `tb/` directories.
+- Verilator
+- Make
+- C/C++ compiler
 
-## Debugging with GDB/OpenOCD (Future)
+Run RTL testbenches from `tb/`:
 
-Once integration is complete, you can connect external debuggers:
-```bash
-openocd -f interface/ftdi/digilent-hs1.cfg -f target/riscv.cfg
-gdb program.elf
-(gdb) target remote localhost:3333
+```sh
+cd tb
+make run tb=tb_axi4_lite_mem_slave
+make run tb=tb_axi4_lite_uart_slave
+make run tb=tb_axi4_lite_timer_slave
+make run tb=tb_axi4_lite_health_slave
+make run tb=tb_debug_module
+make run tb=tb_dtm_top
 ```
 
-## Performance Targets
+`tb_fault_inject` is the main Phase 1 resilience regression, but it currently
+needs an update while the CPU interface is being migrated to AXI4-Lite. See
+[Verification Status](docs/verification_status.md) for the current test state.
 
-- **Clock Frequency**: 100+ MHz
-- **Area**: 4–5K LUTs (estimated)
-- **Power**: ~200 mW (estimated)
-- **CPI**: ~1.3–1.5 (cycles per instruction)
+List available testbenches:
 
+```sh
+cd tb
+make list
+```
 
+Run the C ISS from `sim/`:
 
+```sh
+cd sim
+make
+./sim_baseline tests/test_all.hex
+./sim_baseline --trace tests/test_all.hex
+./sim_space tests/test_all.hex
+```
 
+## Technical Focus
 
+This project is designed to show:
+
+- hardware fault tolerance using ECC and TMR
+- debug architecture using JTAG, DTM, and a RISC-V-style Debug Module
+- clean memory-mapped SoC integration
+- practical verification through directed SystemVerilog testbenches
+- honest tracking of incomplete work, especially ISS-to-RTL co-simulation
