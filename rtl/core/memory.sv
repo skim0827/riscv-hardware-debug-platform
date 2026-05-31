@@ -101,16 +101,15 @@ function automatic logic [31:0] merge_write_data(
     return merged;
 endfunction
 
-task automatic load_init();
+logic [31:0] raw [0:WORDS-1];
+
+initial begin
     if (mem_init != "") begin
-        logic [31:0] raw [0:WORDS-1];
         $readmemh(mem_init, raw);
         for (int i = 0; i < WORDS; i++)
             mem[i] = {ecc_encode(raw[i]), raw[i]};
     end
-endtask
-
-initial load_init();
+end
 
 
 always_ff @(posedge clk) begin 

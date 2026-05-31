@@ -197,7 +197,7 @@ always_ff @(posedge clk or negedge rst_n) begin
         register_a_in <= 32'b0;
         register_b_in <= 32'b0;
     end
-    else begin
+    else if (!stall) begin
         register_a_in <= rd1;
         register_b_in <= rd2;
     end 
@@ -207,7 +207,7 @@ end
 
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) alu_result_reg <= 32'b0;
-    else alu_result_reg <= ALUResult; 
+    else if (!stall) alu_result_reg <= ALUResult; 
 end
 
 
