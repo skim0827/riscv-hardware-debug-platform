@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
-module alu (
+module alu
+import riscv_pkg::*;
+(
     input logic [31:0] srcA,
     input logic [31:0] srcB,
     input alu_control_t ALUControl,
@@ -7,7 +9,6 @@ module alu (
     output logic Zero
 );
 
-import riscv_pkg::*;
 logic [4:0] shamt ; 
 assign shamt = srcB[4:0];
 

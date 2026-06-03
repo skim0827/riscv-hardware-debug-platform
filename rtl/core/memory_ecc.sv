@@ -1,27 +1,34 @@
 `timescale 1ns/1ps
-// =============================================================================
-// BRAM: Vivado Block Memory Generator IP (bram_sp_39x128)
-//   - 39비트 (32 data + 7 ECC), 128 depth
-//   - IP가 BRAM 합성을 보장함 → RTL 패턴 인식 의존 없음
-//
-// ECC: SECDED (Single Error Correct, Double Error Detect)
-//   - ecc_encode: 쓰기 시 7비트 ECC 계산
-//   - ecc_decode: 읽기 시 syndrome 계산, 1비트 수정
-// =============================================================================
 module memory #(
-    parameter WORDS    = 128,
+    parameter WORDS = 128, 
     parameter mem_init = ""
-)(
-    input  logic        clk,
-    input  logic        rst_n,
-    input  logic [31:0] a,
-    input  logic [31:0] wd,
-    input  logic        we,
-    input  logic [2:0]  funct3,
-    output logic [31:0] rd,
-    output logic        corrected,
-    output logic        detected
+) (
+    input clk,
+    input rst_n, 
+
+    input logic [31:0] a,
+    input logic [31:0] wd, 
+    input logic we,
+    input logic [2:0] funct3,  
+
+    output logic [31:0] rd, 
+    output logic corrected,
+    output logic detected
 );
+// Vivado BRAM...
+// (* ram_style = "block" *) logic [38:0]  mem  [0:WORDS-1];
+
+(* ram_style = "block" *) logic [31:0] data_mem [0:WORDS-1];
+(* ram_style = "block" *) logic [6:0]  ecc_mem  [0:WORDS-1];
+
+
+
+/* logic [38:0] word; 
+logic [31:0] corrected_data;
+logic _unused_inputs;
+assign word = mem[a[8:2]];
+assign _unused_inputs = rst_n | |a[31:9]; */
+
 
 localparam bit [5:0] cw_pos[32] = '{
     6'd3,  6'd5,  6'd6,  6'd7,  6'd9,  6'd10, 6'd11, 6'd12,
@@ -29,6 +36,7 @@ localparam bit [5:0] cw_pos[32] = '{
     6'd22, 6'd23, 6'd24, 6'd25, 6'd26, 6'd27, 6'd28, 6'd29,
     6'd30, 6'd31, 6'd33, 6'd34, 6'd35, 6'd36, 6'd37, 6'd38
 };
+
 
 function automatic [6:0] ecc_encode(input logic [31:0] data);
     logic [5:0] h;
@@ -38,81 +46,97 @@ function automatic [6:0] ecc_encode(input logic [31:0] data);
     return {(^data ^ ^h), h};
 endfunction
 
-// ----------------------------------------------------------------
-// write (SB/SH/SW)
-// ----------------------------------------------------------------
-logic [31:0] rdata_bram;  
-logic [6:0]  recc_bram;   
-
-logic [31:0] merged_wd;
-logic [38:0] bram_din;
-logic [38:0] bram_dout;
-logic [6:0]  addr;
-
-assign addr = a[8:2];
-
-always_comb begin
-// NOTE: rdata_bram has 1-cycle BRAM read latency.
-// For SW (full word writes) this is fine - merged_wd ignores rdata_bram.
-// For SB/SH (partial writes) rdata_bram reflects the previous cycle's read.
-// This is acceptable for bring-up; Phase 3 will add a read-modify-write buffer.
-    merged_wd = rdata_bram;
-    case (funct3[1:0])
-        2'b10: merged_wd = wd;
+function automatic logic [31:0] merge_write_data(
+    input logic [31:0] old_word,
+    input logic [31:0] write_data,
+    input logic [1:0]  access_size,
+    input logic [1:0]  byte_addr
+);
+    logic [31:0] merged;
+    merged = old_word;
+    case (access_size)
+        2'b10: merged = write_data;
         2'b01: begin
-            if (!a[1]) merged_wd[15:0]  = wd[15:0];
-            else       merged_wd[31:16] = wd[15:0];
+            if (!byte_addr[1]) merged[15:0] = write_data[15:0];
+            else               merged[31:16] = write_data[15:0];
         end
         2'b00: begin
-            case (a[1:0])
-                2'b00: merged_wd[7:0]   = wd[7:0];
-                2'b01: merged_wd[15:8]  = wd[7:0];
-                2'b10: merged_wd[23:16] = wd[7:0];
-                2'b11: merged_wd[31:24] = wd[7:0];
+            case (byte_addr)
+                2'b00: merged[7:0]   = write_data[7:0];
+                2'b01: merged[15:8]  = write_data[7:0];
+                2'b10: merged[23:16] = write_data[7:0];
+                2'b11: merged[31:24] = write_data[7:0];
             endcase
         end
-        default: merged_wd = wd;
+        default: merged = write_data;
     endcase
+    return merged;
+endfunction
+
+// ----------------------------------------------------------------
+// data_mem, ecc_mem separate load 
+// ----------------------------------------------------------------
+
+logic [31:0] raw [0:WORDS-1];
+
+initial begin
+    if (mem_init != "") begin
+        $readmemh(mem_init, raw);
+        for (int i = 0; i < WORDS; i++) begin 
+            // mem[i] = {ecc_encode(raw[i]), raw[i]};
+            data_mem[i] = raw[i];
+            ecc_mem[i]  = ecc_encode(raw[i]);
+        end
+    end
 end
 
-assign bram_din    = {ecc_encode(merged_wd), merged_wd};
-assign rdata_bram  = bram_dout[31:0];
-assign recc_bram   = bram_dout[38:32];
+// ----------------------------------------------------------------
+// write
+// ----------------------------------------------------------------
+logic [31:0] merged_wd;
+assign merged_wd = merge_write_data(data_mem[a[8:2]], wd, funct3[1:0], a[1:0]);
+
+always_ff @(posedge clk) begin 
+    if (we) begin
+/*         mem[a[8:2]] <= {
+            ecc_encode(merge_write_data(word[31:0], wd, funct3[1:0], a[1:0])),
+            merge_write_data(word[31:0], wd, funct3[1:0], a[1:0])
+        }; */
+        data_mem[a[8:2]] <= merged_wd;
+        ecc_mem [a[8:2]] <= ecc_encode(merged_wd);
+    end 
+end 
+
 
 // ----------------------------------------------------------------
-// Vivado Block Memory Generator IP instance
-// Single Port RAM, 39bit x 128
+// ECC decode + read 
 // ----------------------------------------------------------------
-bram_sp_39x128 u_bram (
-    .clka  (clk),
-    .wea   (we),
-    .addra (addr), // 7 bit
-    .dina  (bram_din), // 39 bit
-    .douta (bram_dout) // 39 bit 
-);
-
-// ----------------------------------------------------------------
-// ECC decoding
-// ----------------------------------------------------------------
+logic [31:0] rdata_raw;
+logic [6:0]  recc_raw;
 logic [31:0] corrected_data;
 logic _unused;
-assign _unused = rst_n | |a[31:9];
+
+
+assign rdata_raw = data_mem[a[8:2]];
+assign recc_raw  = ecc_mem [a[8:2]];
+assign _unused   = rst_n | |a[31:9];
 
 always_comb begin : ecc_decode
-    logic [5:0] h, syndrome;
+    logic [5:0] h;
+    logic [5:0] syndrome;
     logic       overall_err;
     logic [31:0] data;
 
-    data        = rdata_bram;
-    h           = 6'b0;
-    corrected   = 1'b0;
-    detected    = 1'b0;
+    data = rdata_raw;
+    h    = 6'b0;
+    corrected = 1'b0;
+    detected  = 1'b0;
 
     for (int i = 0; i < 32; i++)
         if (data[i]) h ^= cw_pos[i];
 
-    syndrome    = h ^ recc_bram[5:0];
-    overall_err = ^data ^ ^recc_bram[5:0] ^ recc_bram[6];
+    syndrome    = h ^ recc_raw[5:0];
+    overall_err = ^data ^ ^recc_raw[5:0] ^ recc_raw[6];
 
     if (syndrome == 6'b0 && overall_err == 1'b0) begin
         corrected_data = data;
@@ -120,14 +144,15 @@ always_comb begin : ecc_decode
         for (int i = 0; i < 32; i++)
             if (cw_pos[i] == syndrome) data = data ^ (32'b1 << i); // flip
         corrected_data = data;
-        corrected      = 1'b1;
+        corrected = 1'b1;
     end else if (syndrome != 6'b0 && overall_err == 1'b0) begin
         corrected_data = data;
-        detected       = 1'b1;
+        detected  = 1'b1;
     end else begin
         corrected_data = data;
     end
 end
+
 
 // ----------------------------------------------------------------
 // read, func3 determines sign and extend
@@ -164,4 +189,5 @@ always_comb begin
     endcase 
 end
 
-endmodule
+
+endmodule 

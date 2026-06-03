@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
-module alu_decoder (
+module alu_decoder 
+import riscv_pkg::*;
+(
     input logic [6:0] opcode, 
     input logic [2:0] funct3, 
     input logic funct7_5,
@@ -8,7 +10,7 @@ module alu_decoder (
     output alu_control_t ALUControl_out 
 );
 
-import riscv_pkg::*;
+
 alu_control_t ALUControl;  
 assign ALUControl_out = ForceAdd ? ALU_ADD : ALUControl;
 

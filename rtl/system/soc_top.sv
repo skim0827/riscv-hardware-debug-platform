@@ -65,10 +65,10 @@ module soc_top (
     input logic rst_btn,      // active HIGH from button
 
     // JTAG debug port
-    input  logic tck,
-    input  logic tms,
-    input  logic tdi,
-    output logic tdo,
+    // input  logic tck,
+    // input  logic tms,
+    // input  logic tdi,
+    // output logic tdo,
 
     // UART TX
     output logic uart_tx,
@@ -91,6 +91,12 @@ module soc_top (
 import dmi_pkg::*;
 import riscv_pkg::*;
 import axi4_lite_pkg::*;
+// not used tie off
+
+logic tck, tms, tdi, tdo;
+assign tck = 1'b0;
+assign tms = 1'b1; 
+assign tdi = 1'b0;
 
 // arty A7
 logic rst_n;
@@ -457,7 +463,7 @@ axi4_lite_null_slave u_null (
 // =============================================================================
 axi4_lite_mem_slave #(
     .WORDS   (128),
-    .MEM_INIT("../../sw/fpga_hello/fpga_hello.memh")
+    .MEM_INIT("/home/sonia/riscv-hardware-debug-platform/sw/uart_hello/uart_hello_words.memh")
 ) u_imem (
     .clk      (clk),
     .rst_n    (rst_n),
@@ -486,7 +492,7 @@ axi4_lite_mem_slave #(
 // =============================================================================
 axi4_lite_mem_slave #(
     .WORDS   (128),
-    .MEM_INIT("../tb/test_dmem.hex")
+    .MEM_INIT("")
 ) u_dmem (
     .clk      (clk),
     .rst_n    (rst_n),

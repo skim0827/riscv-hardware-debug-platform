@@ -55,6 +55,7 @@ wr_state_t  wr_state;
 
 // AXI can send the write address and write data in different cycles
 logic [31:0] aw_addr_r;   // registered write address
+logic [31:0] ar_addr_r;
 logic [31:0] wd_r;        // registered write data
 logic [3:0]  wstrb_r;     // registered write strobes
 logic        aw_recv;     // address has been received
@@ -113,6 +114,7 @@ assign s_bresp  = AXI_RESP_OKAY;
 
 typedef enum logic [1:0] {
     RD_IDLE,
+    RD_ADDR, // 주소를 BRAM에 전달하는 사이클
     RD_LATCH,   // address accepted, data coming out of memory this cycle
     RD_RESP     
 } rd_state_t;
@@ -128,10 +130,13 @@ always_ff @(posedge clk or negedge rst_n) begin
         case (rd_state)
             RD_IDLE: begin 
                 if (s_arvalid && s_arready) begin
-                    rd_state <= RD_LATCH;
+                    ar_addr_r <= s_araddr;
+                    rd_state <= RD_ADDR;
                 end
             end 
-
+            RD_ADDR: begin
+                rd_state <= RD_LATCH;      // 1사이클 대기 → BRAM 출력 준비됨
+            end
             RD_LATCH: begin 
                 rdata_r  <= mem_rd;
                 rd_state <= RD_RESP;
@@ -170,9 +175,7 @@ logic [2:0]  mem_funct3;
 logic [31:0] mem_rd;
 
 
-assign mem_addr   = (wr_state == WR_EXEC) ? aw_addr_r :
-                    (rd_state != RD_IDLE) ? s_araddr  : 
-                                            s_araddr;
+assign mem_addr = (wr_state == WR_EXEC) ? aw_addr_r : ar_addr_r;
 assign mem_wd     = wd_r;
 assign mem_we     = (wr_state == WR_EXEC);
 assign mem_funct3 = (wr_state == WR_EXEC) ? wstrb_to_funct3(wstrb_r) : 3'b010;
