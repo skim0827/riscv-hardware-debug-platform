@@ -1,23 +1,4 @@
-// ============================================================================
-// RISC-V Debug Transport Module (DTM) - Top Level
-// 
-// Specification: RISC-V External Debug Support Version 0.13.2
-// Section 6.1: JTAG Debug Transport Module
-//
-// This module implements the JTAG-based Debug Transport Module (DTM) that:
-// - Translates JTAG protocol to DMI (Debug Module Interface) protocol
-// - Manages IR (instruction register) and DR (data register) operations
-// - Implements JTAG TAP state machine integration
-// - Supports DMI read/write operations with error/busy status handling
-// 
-// Key Registers (per spec 6.1.2):
-// - IR[4:0]:  JTAG instruction codes
-//   * 0x01: IDCODE
-//   * 0x10: DTMCS (DTM Control and Status)
-//   * 0x11: DMI (Debug Module Interface Access)
-//   * 0x1f: BYPASS
-// - DR: Variable width depending on IR selection
-// ============================================================================
+// JTAG Debug Transport Module, Debug Spec v0.13.2.
 module dtm_top #(
     /* verilator lint_off UNUSEDPARAM */
     parameter int WIDTH = 32, 
@@ -55,15 +36,13 @@ module dtm_top #(
 );
 
 import dmi_pkg::*;
-// table 6.1 
+// JTAG instruction opcodes.
 localparam logic [4:0] DTM_IR_IDCODE = 5'h01;
 localparam logic [4:0] DTM_IR_DTMCS  = 5'h10;
 localparam logic [4:0] DTM_IR_DMI    = 5'h11;
 localparam logic [4:0] DTM_IR_BYPASS = 5'h1f;
 localparam logic [31:0] IDCODE_VALUE = 32'h12345678; // placeholder 
-// ========================================================================
 // registers 
-// ========================================================================
 logic [4:0] ir_data;
 logic [4:0] ir_parallel_in;
 
@@ -81,9 +60,7 @@ logic tdo_internal;
 // decoded IR instruction 
 logic select_idcode, select_dtmcs, select_dmi, select_bypass;
 
-// ========================================================================
-// DMI STATE 
-// ========================================================================
+// DMI operation codes.
 typedef enum logic [1:0] {
     DMI_IDLE    = 2'b00,
     DMI_READ    = 2'b01,
@@ -92,11 +69,9 @@ typedef enum logic [1:0] {
 } dmi_op_t; 
 
 
-// IR capture value 
-assign ir_parallel_in = 5'b00001; // 0x01 ???
-// ========================================================================
+// IR capture value.
+assign ir_parallel_in = 5'b00001; // IDCODE
 // Instruction decoder 
-// ========================================================================
 always_comb begin : instr_decode 
     select_idcode   = 1'b0;
     select_dtmcs    = 1'b0;
@@ -113,29 +88,22 @@ always_comb begin : instr_decode
 end 
 
 
-// ========================================================================
 // IR : capture shift and update 
-// ========================================================================
 always_ff @(posedge tck) begin : ir_shift_register 
     if (capture_ir) ir_data  <= ir_parallel_in; // capture 0x01 
     else if (shift_ir) ir_data  <= {tdi, ir_data[4:1]}; // shift right 
-    else if (update_ir) ; // ??? do nothing ??
+    else if (update_ir) ; // IR update is held in ir_data.
 end 
 
 assign ir_tdo = ir_data[0]; // LSB 
 
-// ========================================================================
 // Data Reg - IDCODE 
-// ========================================================================
 always_ff @(posedge tck) begin : idcode_register
     if (capture_dr && select_idcode) idcode_dr_data <= IDCODE_VALUE;
     else if (shift_dr && select_idcode) idcode_dr_data <= {tdi, idcode_dr_data[31:1]};
-    // where is update ???  i don't understand this behaviour
 end 
 
-// ========================================================================
 // Data Reg - DTMCS 
-// ========================================================================
 always_ff @(posedge tck) begin : dtmcs_register 
     if (capture_dr && select_dtmcs) begin 
         
@@ -152,9 +120,7 @@ always_ff @(posedge tck) begin : dtmcs_register
     end else if (shift_dr && select_dtmcs) dtmcs_dr_data <= {tdi, dtmcs_dr_data[31:1]};
 end 
 
-// ========================================================================
 // Data Reg - DMI regs 
-// ========================================================================
 always_ff @(posedge tck) begin : dmi_register 
 
     if (capture_dr && select_dmi) begin 
@@ -174,17 +140,14 @@ always_ff @(posedge tck) begin
 end 
 
 
-// BYPASS regs 
-// ========================================================================
+// BYPASS register.
 always_ff @(posedge tck) begin : bypass_register 
-    if (capture_dr && select_bypass) bypass_reg  <= 1'b0; // must capture 0 per spec ?? where 
+    if (capture_dr && select_bypass) bypass_reg  <= 1'b0; // Capture 0 per JTAG BYPASS.
     else if (shift_dr && select_bypass) bypass_reg <= tdi; 
 end 
 
 
-// ========================================================================
 // TDO mux : priority IR shift - selected DR - BYPASS 
-// ========================================================================
 always_comb begin : tdo_mux 
     if (shift_ir) tdo_internal = ir_tdo; 
     else if (shift_dr) begin 
@@ -200,9 +163,7 @@ always_ff @(posedge tck) begin
     tdo <= tdo_internal; // Delayed by half clock
 end 
 
-// ========================================================================
 // Control signal 
-// ========================================================================
 always_ff @(posedge tck) begin : control_outputs 
     if (update_dr && select_dtmcs) begin 
         dtmcs_dmihardreset <= dtmcs_dr_data[17]; 

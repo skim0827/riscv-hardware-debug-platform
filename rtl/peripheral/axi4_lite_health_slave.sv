@@ -38,7 +38,7 @@ module axi4_lite_health_slave (
     output logic        s_rvalid,
     input  logic        s_rready,
 
-    // Fault inputs — wire directly to CPU outputs in soc_top
+    // Fault inputs from CPU and memory.
     input  logic        imem_corrected,
     input  logic        imem_detected,
     input  logic        dmem_corrected,
@@ -53,7 +53,7 @@ module axi4_lite_health_slave (
 );
 import axi4_lite_pkg::*;
 
-logic [31:0] irq_mask_reg;   // IRQ_MASK — which events trigger interrupt
+logic [31:0] irq_mask_reg;   // IRQ_MASK event enables
 
 logic [31:0] ecc_corr_cnt, ecc_det_cnt;
 logic [31:0] tmr_pc_cnt, tmr_fsm_cnt, tmr_rf_cnt, tmr_ir_cnt;
@@ -122,7 +122,7 @@ always_ff @(posedge clk or negedge rst_n) begin
         wd_r        <= '0;
         aw_recv     <= 1'b0;
         w_recv      <= 1'b0;
-        irq_mask_reg<= '0;     // all interrupts masked by default — safe startup
+        irq_mask_reg<= '0;     // Mask all IRQs by default.
     end else begin
         case (wr_state)
             WR_IDLE: begin
@@ -143,7 +143,7 @@ always_ff @(posedge clk or negedge rst_n) begin
                     HEALTH_IRQ_MASK:   irq_mask_reg <= wd_r;
                     HEALTH_IRQ_STATUS: ; // handled by irq_clear_pulse above
                     HEALTH_CTRL:       ; // handled by cnt_clear_pulse above
-                    default:           ; // read-only — ignore
+                    default:           ; // Read-only: ignore.
                 endcase
                 wr_state <= WR_RESP;
                 aw_recv  <= 1'b0;

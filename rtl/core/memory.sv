@@ -1,13 +1,6 @@
 `timescale 1ns/1ps
-// =============================================================================
-// BRAM: Vivado Block Memory Generator IP (bram_sp_39x128)
-//   - 39비트 (32 data + 7 ECC), 128 depth
-//   - IP가 BRAM 합성을 보장함 → RTL 패턴 인식 의존 없음
-//
-// ECC: SECDED (Single Error Correct, Double Error Detect)
-//   - ecc_encode: 쓰기 시 7비트 ECC 계산
-//   - ecc_decode: 읽기 시 syndrome 계산, 1비트 수정
-// =============================================================================
+// BRAM-backed memory with SECDED ECC.
+// Uses Vivado bram_sp_39x128 IP: 39 bits by 128 entries.
 module memory #(
     parameter WORDS    = 128,
     parameter mem_init = ""
@@ -38,9 +31,7 @@ function automatic [6:0] ecc_encode(input logic [31:0] data);
     return {(^data ^ ^h), h};
 endfunction
 
-// ----------------------------------------------------------------
-// write (SB/SH/SW)
-// ----------------------------------------------------------------
+// Write path for SB/SH/SW.
 logic [31:0] rdata_bram;  
 logic [6:0]  recc_bram;   
 
@@ -52,10 +43,7 @@ logic [6:0]  addr;
 assign addr = a[8:2];
 
 always_comb begin
-// NOTE: rdata_bram has 1-cycle BRAM read latency.
-// For SW (full word writes) this is fine - merged_wd ignores rdata_bram.
-// For SB/SH (partial writes) rdata_bram reflects the previous cycle's read.
-// This is acceptable for bring-up; Phase 3 will add a read-modify-write buffer.
+// Partial writes use the previous BRAM read data during bring-up.
     merged_wd = rdata_bram;
     case (funct3[1:0])
         2'b10: merged_wd = wd;
@@ -79,10 +67,7 @@ assign bram_din    = {ecc_encode(merged_wd), merged_wd};
 assign rdata_bram  = bram_dout[31:0];
 assign recc_bram   = bram_dout[38:32];
 
-// ----------------------------------------------------------------
-// Vivado Block Memory Generator IP instance
-// Single Port RAM, 39bit x 128
-// ----------------------------------------------------------------
+// Vivado single-port BRAM IP.
 bram_sp_39x128 u_bram (
     .clka  (clk),
     .wea   (we),
@@ -91,9 +76,7 @@ bram_sp_39x128 u_bram (
     .douta (bram_dout) // 39 bit 
 );
 
-// ----------------------------------------------------------------
 // ECC decoding
-// ----------------------------------------------------------------
 logic [31:0] corrected_data;
 logic _unused;
 assign _unused = rst_n | |a[31:9];
@@ -129,11 +112,9 @@ always_comb begin : ecc_decode
     end
 end
 
-// ----------------------------------------------------------------
-// read, func3 determines sign and extend
-// ----------------------------------------------------------------
+// Read path with funct3 sign/zero extension.
 // a[1:0] byte offset (ignored for word access)
-// a[8:2] word index (7 bits → 128 entries)
+// a[8:2] word index.
 always_comb begin 
     case(funct3)
         3'b000 : begin // LB

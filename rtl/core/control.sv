@@ -2,17 +2,16 @@
 module control
 import riscv_pkg::*;
 (
-    input logic clk,
-    input logic rst_n,
-    input logic Zero,
-    input opcode_t op, 
-    input logic [2:0] funct3,
-    input logic funct7_5,
+    input  logic clk,
+    input  logic rst_n,
+    input  logic Zero,
+    input  opcode_t op, 
+    input  logic [2:0] funct3,
+    input  logic funct7_5,
 
     output logic RegWrite, 
     output logic MemWrite,
     output logic MemRead,
-    output logic IRWrite, 
     output logic PCWrite,
     output logic [1:0] ResultSrc,
     output logic [1:0] ALUSrcB, 
@@ -20,7 +19,7 @@ import riscv_pkg::*;
     output alu_control_t ALUControl,
     output logic [2:0] ImmSrc,
 
-    // Hart Interface  (from DM)
+    // Hart interface (from DM)
     input  logic hart_halt_req,
     input  logic hart_resume_req,
     output logic hart_halted,
@@ -31,17 +30,24 @@ import riscv_pkg::*;
 
     output logic tmr_fsm_error,
 
-    input logic stall
+    input  logic stall,
+
+    // Fetch handshake
+    // fetch_done: pulse from ifetch FSM when instruction word is latched.
+    //             Fed into tmr_main_fsm so S_FETCH self-stalls until complete.
+    // in_fetch_r: registered "FSM is in S_FETCH" signal, driven back to
+    //             cpu_top to trigger arvalid one cycle after reset de-assertion.
+    input  logic fetch_done,
+    output logic in_fetch_r
 );
 
 logic Branch;
 logic PCUpdate;
+logic ForceAdd;
 
-logic branch_condition ;
+logic branch_condition;
 assign branch_condition = Zero ^ (funct3[0] ^ funct3[2]);
 assign PCWrite = (branch_condition && Branch) || PCUpdate;
-
-logic ForceAdd; 
 
 tmr_main_fsm u_fsm (
     .clk(clk),
@@ -56,14 +62,15 @@ tmr_main_fsm u_fsm (
     .PCUpdate(PCUpdate),
     .RegWrite(RegWrite),
     .MemWrite(MemWrite),
-    .IRWrite(IRWrite),
+    .MemRead(MemRead),
     .ResultSrc(ResultSrc),
     .ALUSrcB(ALUSrcB),
     .ALUSrcA(ALUSrcA),
     .ForceAdd(ForceAdd),
     .tmr_error(tmr_fsm_error),
-    .stall  (stall),
-    .MemRead(MemRead)
+    .stall(stall),
+    .fetch_done(fetch_done),
+    .in_fetch_r(in_fetch_r)
 );
 
 alu_decoder u_alu(
@@ -79,4 +86,4 @@ instr_decoder u_instr(
     .ImmSrc(ImmSrc)
 );
 
-endmodule 
+endmodule

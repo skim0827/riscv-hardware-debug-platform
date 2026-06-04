@@ -1,13 +1,6 @@
 `timescale 1ns/1ps
-// =============================================================================
-// axi4_lite_null_slave.sv
-//
-// A minimal AXI4-Lite slave that accepts any transaction and returns DECERR.
-//
-// The data crossbar has 5 slave slots, one of which is SLV_IMEM (slot 0).
-// IMEM is connected directly to the CPU's instruction fetch port and is
-// intentionally NOT accessible via the data bus.
-// =============================================================================
+// AXI4-Lite null slave for inaccessible address slots.
+// Accepts transactions and returns DECERR.
 
 module axi4_lite_null_slave (
     input  logic clk,
@@ -43,9 +36,7 @@ module axi4_lite_null_slave (
 
 import axi4_lite_pkg::*;
 
-// =============================================================================
-// Write path — accept address + data in one cycle, return DECERR
-// =============================================================================
+// Write path returns DECERR.
 typedef enum logic [1:0] { WR_IDLE, WR_RESP } wr_t;
 wr_t wr_state;
 
@@ -63,9 +54,7 @@ assign s_wready  = (wr_state == WR_IDLE);
 assign s_bvalid  = (wr_state == WR_RESP);
 assign s_bresp   = AXI_RESP_DECERR;
 
-// =============================================================================
-// Read path — accept address, return DECERR with 0xDEAD_BEEF
-// =============================================================================
+// Read path returns DECERR with 0xDEAD_BEEF.
 typedef enum logic [1:0] { RD_IDLE, RD_RESP } rd_t;
 rd_t rd_state;
 

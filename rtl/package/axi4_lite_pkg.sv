@@ -30,7 +30,7 @@ package axi4_lite_pkg;
     // Timer/WDT (base: TIMER_BASE)
     localparam [11:0] TIMER_CTRL    = 12'h000; // R/W: bit[0]=enable, bit[1]=wdt_en
     localparam [11:0] TIMER_COUNT   = 12'h004; // R:   current counter value
-    localparam [11:0] TIMER_TIMEOUT = 12'h008; // R/W: threshold — IRQ fires when COUNT==TIMEOUT
+    localparam [11:0] TIMER_TIMEOUT = 12'h008; // R/W: IRQ threshold
     localparam [11:0] TIMER_STATUS  = 12'h00C; // R/W: bit[0]=irq_pending, bit[1]=wdt_fired
                                                 //      write 1 to bit[0] to clear irq_pending
 

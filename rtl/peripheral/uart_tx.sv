@@ -60,7 +60,7 @@ always_ff @(posedge clk or negedge rst_n) begin
                 end
             end
             TX_START: begin
-                tx <= 1'b0; // start bit — pull low
+                tx <= 1'b0; // start bit
                 if (baud_tick) begin
                     bit_idx  <= 3'd0;
                     tx_state <= TX_DATA;
@@ -78,7 +78,7 @@ always_ff @(posedge clk or negedge rst_n) begin
                 end
             end
             TX_STOP: begin
-                tx <= 1'b1; // stop bit — return high
+                tx <= 1'b1; // stop bit
                 if (baud_tick) begin
                     tx_state <= TX_IDLE;
                 end

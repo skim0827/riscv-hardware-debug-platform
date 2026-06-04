@@ -9,12 +9,12 @@ module progbuf (
     output logic pb_done, 
     output logic pb_exception, 
 
-    // instructtion interface 
+    // Instruction interface
     output logic [31:0] pb_instr, 
     output logic        pb_exec, 
     input  logic        hart_progbuf_done, 
 
-    // memory interface 
+    // Memory interface
     input  logic [3:0]  pb_addr,  // from DM 
     input  logic [31:0] pb_wdata, // from Debugger 
     input  logic        pb_we,  
@@ -22,9 +22,7 @@ module progbuf (
     input  logic        pb_re
  );
 
-// ========================================================================
 // Program counter FSM 
-// ========================================================================
 
  typedef enum logic [2:0] { 
     PROGBUF_IDLE    = 3'h0, 
@@ -34,42 +32,32 @@ module progbuf (
     PROGBUF_ERROR   = 3'h4
 } progbuf_state_t;
 
-// ========================================================================
 // Internal Registers 
-// ========================================================================
 logic [31:0]     progbuf[0:15]; // instr memory 
 logic [3:0]      progbuf_pc, progbuf_pc_next;
 progbuf_state_t  progbuf_state, progbuf_state_next;
 
-// ========================================================================
 // Control Signals 
-// ========================================================================
 logic [31:0]     progbuf_instr_current; 
 logic            is_ebreak; 
 logic            is_last_pb_instr; 
-logic            progbuf_exec_d; //delay in order to track
+logic            progbuf_exec_d; // One-cycle delay.
 
 
-// ========================================================================
 // Comb logic - Instruction decode 
-// ========================================================================
 always_comb begin : decode_progbuf_instr
     progbuf_instr_current = progbuf[progbuf_pc];
     is_ebreak             = (progbuf_instr_current == 32'h00100073);
     is_last_pb_instr      = (progbuf_pc == 4'd15);
 end 
 
-// ========================================================================
 // Comb logic - progbuf read 
-// ========================================================================
 always_comb begin : progbuf_read 
     pb_rdata              = 32'h0;
     if (pb_re) pb_rdata   = progbuf[pb_addr]; 
 end 
 
-// ========================================================================
 // FSM - Progbuf execution 
-// ========================================================================
 always_comb begin : progbuf_fsm 
     progbuf_state_next    = progbuf_state; 
 
@@ -114,19 +102,15 @@ always_comb begin : progbuf_fsm
     end 
 end 
 
-// ========================================================================
 // Comb logic - outputs 
-// ========================================================================
 always_comb begin : output_logic
     pb_instr     = progbuf_instr_current; 
     pb_exec      = (progbuf_state == PROGBUF_EXEC && !progbuf_exec_d); // one-cycle pulse
     pb_done      = (progbuf_state == PROGBUF_DONE && progbuf_state_next == PROGBUF_IDLE);
-    pb_exception = 1'b0; // for now no exception..
+    pb_exception = 1'b0; // Exceptions not implemented yet.
 end 
 
-// ========================================================================
 // Seq logic - state update 
-// ========================================================================
 always_ff @(posedge clk or negedge rst_n) begin 
     if (!rst_n) begin 
         progbuf_state <= PROGBUF_IDLE;

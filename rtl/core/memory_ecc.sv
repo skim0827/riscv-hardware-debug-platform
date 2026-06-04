@@ -158,7 +158,7 @@ end
 // read, func3 determines sign and extend
 // ----------------------------------------------------------------
 // a[1:0] byte offset (ignored for word access)
-// a[8:2] word index (7 bits → 128 entries)
+// a[8:2] word index.
 always_comb begin 
     case(funct3)
         3'b000 : begin // LB

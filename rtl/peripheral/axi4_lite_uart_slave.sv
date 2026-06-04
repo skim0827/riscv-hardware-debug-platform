@@ -165,5 +165,5 @@ assign s_arready = (rd_state == RD_IDLE);
 assign s_rvalid  = (rd_state == RD_RESP);
 assign s_rdata   = rdata_r;
 assign s_rresp   = AXI_RESP_OKAY;
-// TODO : Add proper BRESP/RRESP logic when you write soc_top.sv and run the integration test. 
+// TODO: Add full BRESP/RRESP handling.
 endmodule 

@@ -1,21 +1,5 @@
-// ============================================================================
-// dmi_cdc_bridge.sv
-//   tck domain  : JTAG test clock (DTM side, slow ~1-20 MHz)
-//   clk domain  : system clock    (DM  side, fast ~50-200 MHz)
-//
-// Forward path  (tck → clk) : toggle synchronizer
-//   - cmd_cap holds {we,re,addr,wdata} packed in tck domain
-//   - toggle_tck flips whenever a new transaction arrives
-//   - 3-stage pipeline (sync1→sync2→sync2_q) in clk domain detects the edge
-//   - On edge: latch cmd_cap and pulse clk_dmi_valid for one clk cycle
-//
-//   Data safety assumption: tck ≪ clk, so cmd_cap is stable for many clk
-//   cycles before the toggle edge propagates — standard "slow sender" CDC.
-//
-// Return path   (clk → tck) : 2-FF synchronizer
-//   Safe for same reason: by the time tck samples, clk_dmi_rdata has been
-//   stable for >> 1 tck period.
-// ============================================================================
+// DMI clock-domain bridge between JTAG tck and system clk.
+// Uses a toggle sync for commands and two FFs for read data.
 `timescale 1ns/1ps
 
 module dmi_cdc_bridge (
@@ -38,9 +22,7 @@ module dmi_cdc_bridge (
     output logic        clk_dmi_valid, // one-cycle pulse on new transaction
     input  logic [31:0] clk_dmi_rdata  
 ); 
-// ============================================================================
-// Forward path : tck → clk
-// ============================================================================
+// Forward path: tck to clk.
 logic [40:0] cmd_cap; // pack command bus
 logic        toggle_tck;
 
@@ -71,7 +53,7 @@ always_ff @(posedge clk or negedge rst_n) begin
         sync2   <= sync1;
         sync2_q <= sync2;
 
-        clk_dmi_valid <= (sync2 != sync2_q); // Fires one cycle after sync2 changes — valid one-cycle pulse
+        clk_dmi_valid <= (sync2 != sync2_q); // One-cycle valid pulse.
         if (sync2 != sync2_q) begin
             {clk_dmi_we, clk_dmi_re, clk_dmi_addr, clk_dmi_wdata} <= cmd_cap;
         end else begin 
@@ -84,9 +66,7 @@ end
 
 
 
-// ============================================================================
-// Return path : clk → tck  (2-FF synchroniser)
-// ============================================================================
+// Return path: clk to tck.
 logic [31:0] rdata_sync1, rdata_sync2;
 
 always_ff @(posedge tck or negedge rst_n) begin 

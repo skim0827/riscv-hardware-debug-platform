@@ -18,10 +18,10 @@ module health_monitor (
     output logic [31:0] tmr_fsm_cnt_o,     // HEALTH_TMR_FSM_CNT
     output logic [31:0] tmr_rf_cnt_o,      // HEALTH_TMR_RF_CNT
     output logic [31:0] tmr_ir_cnt_o,      // HEALTH_TMR_IR_CNT
-    output logic [31:0] status_o,          // HEALTH_STATUS  — live wire values
-    output logic [31:0] irq_status_o,      // HEALTH_IRQ_STATUS — latched events
+    output logic [31:0] status_o,          // HEALTH_STATUS live values
+    output logic [31:0] irq_status_o,      // HEALTH_IRQ_STATUS latched events
 
-    input  logic [31:0] irq_mask_i,        // HEALTH_IRQ_MASK   — from slave register
+    input  logic [31:0] irq_mask_i,        // HEALTH_IRQ_MASK from slave
     input  logic        irq_clear_i,       // pulse from slave when W1C write happens
     input  logic [31:0] irq_clear_bits_i,  // which IRQ_STATUS bits to clear
     input  logic        cnt_clear_i,       // pulse from slave: CTRL bit[0] clear all
@@ -66,7 +66,7 @@ assign tmr_fsm_cnt_o  = tmr_fsm_cnt;
 assign tmr_rf_cnt_o   = tmr_rf_cnt;
 assign tmr_ir_cnt_o   = tmr_ir_cnt;
 
-// STATUS register — live wire snapshot
+// STATUS register live snapshot.
 //
 // Bit assignments:
 //   [0] imem_corrected

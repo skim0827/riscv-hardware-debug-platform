@@ -38,9 +38,7 @@ module debug_module(
 import dmi_pkg::*;
 import riscv_pkg::*;
 
-// ======================================================================
-// INTERNAL REGISTERS - table 3.8
-// ======================================================================
+// DMI registers, Debug Spec table 3.8.
 dmstatus_t              dmstatus_reg;
 dmcontrol_t             dmcontrol_reg;
 abstractcs_t            abstractcs_reg;
@@ -49,9 +47,7 @@ cmd_access_register_t   cmd_access_reg;
 
 logic [31:0]    data_regs[0:11];
 
-// ======================================================================
-// STATE MACHINE for DM 
-// ======================================================================
+// Abstract command state machine.
 typedef enum logic [3:0] { 
     CMD_IDLE        = 4'h0, 
     CMD_DECODE      = 4'h1,   // validate cmd + confirm hart halted
@@ -65,9 +61,7 @@ typedef enum logic [3:0] {
 
 cmd_state_t cmd_state, cmd_state_next; 
 
-// ======================================================================
 // Internal Control Signal 
-// ======================================================================
 logic           hart_halted_r; 
 logic           hart_halted_sticky;
 logic           hart_resuming;
@@ -92,14 +86,10 @@ assign _unused_debug_inputs = progbuf_exception |
                               |cmd_access_reg[23:19];
 
 
-// ======================================================================
 // Comb logic - Progbuf addr decoding  
-// ======================================================================
 wire            dmi_addr_is_progbuf = (dmi_addr >= 7'h20) && (dmi_addr <= 7'h2f);
 
-// ======================================================================
 // Comb logic - DMI regs read 
-// ======================================================================
 always_comb begin : dmi_read_path 
     dmi_rdata = 32'h0; 
 
@@ -107,7 +97,7 @@ always_comb begin : dmi_read_path
         case(dmi_addr)   
             DMI_DMSTATUS    : dmi_rdata = dmstatus_reg; 
             DMI_DMCONTROL   : dmi_rdata = dmcontrol_reg;
-            DMI_HARTINFO    : dmi_rdata = 32'h0000_0c00; // dataaddr = 0 (hardcoded), datasize = 12, nscratch = 0 section 3.12.3
+            DMI_HARTINFO    : dmi_rdata = 32'h0000_0c00; // dataaddr=0, datasize=12
             DMI_ABSTRACTCS  : dmi_rdata = abstractcs_reg;
             DMI_COMMAND     : dmi_rdata = command_reg;
 
@@ -130,9 +120,7 @@ always_comb begin : dmi_read_path
     end  
 end
 
-// ======================================================================
 // Comb logic - status regs updates 
-// ======================================================================
 always_comb begin : update_dmstatus 
         dmstatus_reg.version         = DMSTATUS_VERSION_0_13;
         dmstatus_reg.confstrptrvalid = 1'b0;
@@ -167,23 +155,17 @@ always_comb begin : update_abstractcs
     abstractcs_reg.datacount   = 4'd12;     // 12 data registers 
 end 
 
-// ======================================================================
 // Comb logic - command decoding table 4.1
-// ======================================================================
 always_comb begin : decode_command
-    // cmd_access_reg = command_reg;
     gpr_addr = cmd_access_reg.regno[4:0];
-    // (Spec Table 3.3)
     is_gpr_access = (cmd_access_reg.regno >= 16'h1000) && 
                     (cmd_access_reg.regno <= 16'h101f);  // x0-x31
     is_pc_access = (cmd_access_reg.regno == 16'h7b1);    // DPC
-    is_csr_access = (cmd_access_reg.regno <= 16'h0fff);  // CSRs -- do i have this ?
+    is_csr_access = (cmd_access_reg.regno <= 16'h0fff);  // CSRs
     gpr_addr = cmd_access_reg.regno[4:0];
 end 
 
-// ======================================================================
 // State Machine - Command execution 
-// ======================================================================
 always_comb begin : cmd_state_fsm
     cmd_state_next = cmd_state;
 
@@ -194,14 +176,14 @@ always_comb begin : cmd_state_fsm
         end 
 
         CMD_DECODE : begin 
-            // Event: hart must be halted before any register access
+            // Register access requires a halted hart.
             if (!hart_halted) begin
                 cmd_state_next = CMD_DECODE;
             end else begin
                 case (cmd_access_reg.cmdtype)
                     8'h00 : begin  // access register
                         if (!cmd_access_reg.transfer) begin
-                            // transfer=0: skip reg access entirely
+                            // transfer=0 skips register access.
                             cmd_state_next = cmd_access_reg.postexec ? CMD_PROGBUF : CMD_DONE;
                         end else begin
                             cmd_state_next = CMD_REG_SETUP;
@@ -235,9 +217,7 @@ always_comb begin : cmd_state_fsm
     endcase
 end
 
-// ======================================================================
 // Comb logic - Hart interface control 
-// ======================================================================
 always_comb begin : hart_control 
     hart_regfile_we    = 1'b0;
     hart_regfile_addr  = 5'h0;
@@ -246,7 +226,7 @@ always_comb begin : hart_control
     hart_pc_wdata      = 32'h0;
 
     if (is_gpr_access) begin
-        // Always drive addr so comb read is valid during CMD_REG_SETUP/SAMPLE
+        // Keep read address valid during setup/sample.
         hart_regfile_addr = gpr_addr;
 
         if (cmd_state == CMD_REG_WRITE) begin
@@ -260,9 +240,7 @@ always_comb begin : hart_control
         end
     end
 end
-// ======================================================================
 // Comb logic - program buffer control 
-// ======================================================================
 always_comb begin : progbuf_control 
     pb_we       = dmi_valid && dmi_we && dmi_addr_is_progbuf; 
     pb_re       = dmi_valid && dmi_re && dmi_addr_is_progbuf; 
@@ -271,25 +249,23 @@ always_comb begin : progbuf_control
 end 
 
 
-// ======================================================================
 // Program buffer instantiation 
-// ======================================================================
 progbuf u_progbuf (
     .clk(clk), 
     .rst_n(rst_n),
 
-    // Control signals from DM 
+    // Control from DM
     .pb_start(pb_start), 
     .pb_halt_req(pb_halt_req), 
     .pb_done(pb_done), 
     .pb_exception(pb_exception), 
 
-    // instructtion interface 
+    // Instruction interface
     .pb_instr(progbuf_instr), 
     .pb_exec(progbuf_exec), 
     .hart_progbuf_done(progbuf_done), 
 
-    // memory interface 
+    // Memory interface
     .pb_addr(dmi_addr[3:0]),  // from DM 
     .pb_wdata(dmi_wdata), // from Debugger 
     .pb_we(pb_we),  
@@ -297,9 +273,7 @@ progbuf u_progbuf (
     .pb_re(pb_re)
 );
 
-// ======================================================================
 // Seq Logic - update block 
-// ======================================================================
 
 always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
     if (!rst_n) begin
@@ -324,21 +298,19 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
             end  
     end else begin 
 
-    // ================================================================
     // hart status tracking 
-    // ================================================================
         hart_halted_r <= hart_halted;
 
         if (hart_halted && !hart_halted_r) begin
             hart_halted_sticky <= 1'b1;
         end
         
-        // Clear havereset on ackhavereset command
+        // Clear havereset on ackhavereset.
         if (dmi_valid && dmi_we && dmi_addr == DMI_DMCONTROL && dmcontrol_reg.ackhavereset) begin
                 hart_halted_sticky <= 1'b0;
             end
 
-        // DATA CAPTURE 
+        // Resume tracking.
         if (!hart_halted && hart_halted_r) begin 
             hart_resuming <= 1'b1;
         end else if (hart_halted ) begin 
@@ -346,9 +318,7 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
         end 
 
 
-        // ================================================================
-        // DMCONTROL register handling (0x10) pg 23
-        // ================================================================
+        // DMCONTROL register handling.
         if (dmi_valid && dmi_we && dmi_addr == DMI_DMCONTROL) begin 
             hart_halt_req       <= dmi_wdata[31]; // hartreq 
             if (dmi_wdata[30]) begin 
@@ -363,9 +333,7 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
             hart_resume_req <= 1'b0;
         end 
 
-        // ================================================================
         // COMMAND regs
-        // ================================================================
         if (dmi_valid && dmi_we && dmi_addr == DMI_COMMAND) begin 
 
             if (abstractcs_reg.busy) begin 
@@ -379,15 +347,11 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
                 
             end 
         end
-        // ================================================================
         // ABSTRACTCS regs 
-        // ================================================================
         if (dmi_valid && dmi_we && dmi_addr == DMI_ABSTRACTCS) begin 
-            abstractcs_reg.cmderr <= abstractcs_reg.cmderr & ~dmi_wdata[10:8]; // CLEAR ERROR
+            abstractcs_reg.cmderr <= abstractcs_reg.cmderr & ~dmi_wdata[10:8]; // Clear error bits.
         end 
-        // ================================================================
-        // DATA REGISTERS (0x04-0x0f) - Write handling
-        // ================================================================
+        // DATA register writes.
         if (dmi_valid && dmi_we) begin
             case (dmi_addr)
                 DMI_DATA0:  data_regs[0] <= dmi_wdata;
@@ -405,12 +369,9 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
                 default: ;
             endcase
         end
-        // ================================================================
-        // COMMAND REGISTER (0x17) - Abstract command execution
-        // ================================================================
+        // Abstract command execution.
         cmd_state <= cmd_state_next;
 
-        // Inside the always_ff block, replace the old CMD_WAIT_HART read:
         if (cmd_state == CMD_REG_SAMPLE && !cmd_access_reg.write) begin
             if (is_gpr_access)
                 data_regs[0] <= hart_regfile_rdata;
@@ -419,18 +380,13 @@ always_ff @(posedge clk or negedge rst_n ) begin : sequential_updates
         end
 
 
-        // busy / error tracking stays the same, just update state names:
+        // Busy and error tracking.
         if (cmd_state == CMD_DONE || cmd_state == CMD_ERROR)
             abstractcs_reg.busy <= 1'b0;
 
         if (cmd_state == CMD_ERROR)
             abstractcs_reg.cmderr <= CMDERR_NOT_SUPPORTED;
 
- 
-        // In the sequential block, replace the commented $display:
-        // $display("[DM] clk=%0t state=%s hart_halted=%0b is_gpr=%0b gpr_addr=%0h rdata=%0h data0=%0h",
-        //     $time, cmd_state.name(), hart_halted, is_gpr_access, 
-        //     gpr_addr, hart_regfile_rdata, data_regs[0]);
      end
 end 
 endmodule

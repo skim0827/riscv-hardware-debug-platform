@@ -1,7 +1,5 @@
 `timescale 1ns/1ps
-//   WSTRB = 4'b1111  → full word      → funct3 = 3'b010 (SW/LW)
-//   WSTRB = 4'b0011 or 4'b1100  → halfword  → funct3 = 3'b001 (SH/LH)
-//   WSTRB = 4'b0001/0010/0100/1000 → byte  → funct3 = 3'b000 (SB/LB)
+// WSTRB maps to word, halfword, or byte access size.
 
 module axi4_lite_mem_slave #(
     parameter WORDS    = 128,
@@ -114,7 +112,7 @@ assign s_bresp  = AXI_RESP_OKAY;
 
 typedef enum logic [1:0] {
     RD_IDLE,
-    RD_ADDR, // 주소를 BRAM에 전달하는 사이클
+    RD_ADDR, // Send address to BRAM.
     RD_LATCH,   // address accepted, data coming out of memory this cycle
     RD_RESP     
 } rd_state_t;
@@ -135,7 +133,7 @@ always_ff @(posedge clk or negedge rst_n) begin
                 end
             end 
             RD_ADDR: begin
-                rd_state <= RD_LATCH;      // 1사이클 대기 → BRAM 출력 준비됨
+                rd_state <= RD_LATCH;      // Wait one cycle for BRAM data.
             end
             RD_LATCH: begin 
                 rdata_r  <= mem_rd;
@@ -160,9 +158,9 @@ assign s_rresp   = AXI_RESP_OKAY;
 
 function automatic logic [2:0] wstrb_to_funct3(input logic [3:0] wstrb);
     case (wstrb)
-        4'b1111:                          return 3'b010; // SW — full word
-        4'b0011, 4'b1100:                 return 3'b001; // SH — halfword
-        4'b0001, 4'b0010, 4'b0100, 4'b1000: return 3'b000; // SB — byte
+        4'b1111:                          return 3'b010; // SW word
+        4'b0011, 4'b1100:                 return 3'b001; // SH halfword
+        4'b0001, 4'b0010, 4'b0100, 4'b1000: return 3'b000; // SB byte
         default:                          return 3'b010; // fallback: word
     endcase
 endfunction
