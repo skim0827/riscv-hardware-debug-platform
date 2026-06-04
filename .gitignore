@@ -1,9 +1,17 @@
-*.vcd 
+*.vcd
+*.dat
 obj_dir/
 
 .vscode/
-*.dat
-sim/sim_baseline
+
+# Native simulator build outputs
+sim/sim
+sim/sim_*
+sim/results/
+
+# RISC-V firmware build outputs
+sw/**/*.o
+sw/**/*.elf
 
 # Synthesis generated files
 synth/system_flat.v
