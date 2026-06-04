@@ -120,7 +120,7 @@ Next phase:
 - add one FIR accelerator
 - compare CPU-only vs DMA + accelerator
 
-FPGA bring-up:
+FPGA bring-up (ongoing): 
 - generate bitstream for Arty A7
 - check timing/resource reports
 - use ILA for UART, reset, AXI, and health signals
