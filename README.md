@@ -1,165 +1,132 @@
-# RISC-V Hardware Debug Platform
+# Space Grade RISCV Soc
 
-A small RV32I hardware platform focused on reliability, debug visibility, and
-SoC integration. The project starts with a hardened compute tile, then builds it
-into an AXI4-Lite based system with memory-mapped peripherals and fault
-telemetry.
+This project is a small FPGA SoC prototype for fault-tolerant onboard data
+processing. The current focus is a simple RV32I CPU with ECC/TMR protection,
+AXI4-Lite peripherals, debug access, and basic telemetry.
 
-## Project Flow
+The goal is not to build a complex CPU. The goal is to build a resilient SoC
+platform that can be tested, measured, and eventually run on FPGA hardware.
 
-### Phase 1 - Hardened Compute Tile
+## Current Status
 
-Goal: prove that resilience mechanisms work before adding more system features.
+Phase 1 and Phase 2 are mostly implemented.
 
-Implemented:
+Phase 1: hardened compute tile
+- RV32I multicycle CPU
+- ECC-protected instruction/data memory
+- TMR on PC, register file, instruction register, and control FSM
+- fault injection testbench work
+- C ISS models for baseline and space-hardened behavior
 
-- RV32I multi-cycle CPU core
-- ECC-protected instruction and data memory
-- TMR-protected PC, register-file/control state paths
-- fault telemetry outputs for ECC and TMR events
-- directed fault-injection testbench
+Phase 2: SoC integration
+- AXI4-Lite crossbar
+- IMEM and DMEM slaves
+- UART TX slave
+- Timer/watchdog slave
+- Health monitor slave
+- JTAG/DTM/Debug Module path
+- top-level SoC integration for Arty A7 bring-up
 
-In progress:
+## Architecture
 
-- automated ISS-to-RTL trace comparison
-- more complete fault campaign reporting
-
-Phase 1 intentionally stops here. The point is not to keep adding CPU features;
-the point is to demonstrate correction, detection, and masking.
-
-### Phase 2 - SoC Integration
-
-Goal: turn the CPU tile into a small system.
-
-Implemented or partially implemented:
-
-- AXI4-Lite data crossbar
-- direct IMEM instruction-fetch path
-- DMEM AXI4-Lite slave
-- UART TX AXI4-Lite slave
-- Timer/watchdog AXI4-Lite slave
-- Health monitor AXI4-Lite slave
-- memory map package
-- JTAG/DTM/Debug Module path integrated at top level
-
-Still in progress:
-
-- full top-level SoC signoff
-- CPU interrupt connection
-- DMA register block
-- firmware-style peripheral access tests
-
-## Architecture Summary
-
-The CPU uses separate instruction and data interfaces:
-
-- instruction fetch goes directly to IMEM
-- data reads/writes go through an AXI4-Lite crossbar
-
-The current SoC top level is `rtl/system/soc_top.sv`.
-
-```
-JTAG -> TAP -> DTM -> CDC -> Debug Module
-                              |
-                              v
-                         RV32I CPU
-                         /       \
-                  IMEM direct   AXI4-Lite data crossbar
-                                  |    |      |       |
-                                DMEM  UART  Timer   Health
+```text
+                    +----------------------+
+                    |    RISC-V CPU        |
+                    | + Debug Module       |
+                    +----------+-----------+
+                               |
+                         AXI4-Lite Bus
+                               |
+ +-------------+--------------+---------------+---------------+
+ |             |              |               |               |
+IMEM(ECC)   DMEM(ECC)      UART        Timer/WDT      Health Monitor
+                                                                  |
+                                                     Telemetry Counters
+                                                                  |
+                                                            Interrupts
+                                                                  |
+                                                          DMA Controller
+                                                                  |
+                                                          AXI Stream
+                                                                  |
+                                                     +------------+
+                                                     |
+                                                FIR Accelerator
+                                                     |
+                                                Results → DMEM
 ```
 
-Fault telemetry is system-visible:
+The CPU fetches instructions directly from IMEM. Data accesses go through the
+AXI4-Lite bus. Fault signals are collected by the health monitor.
 
-- ECC correction count
-- ECC detection count
-- TMR disagreement counts
-- live fault status
-- latched interrupt status
-
-## Documentation
-
-Start here:
-- [Phase 1 - Hardened Compute Tile](docs/phase1_hardened_compute_tile.md)
-- [Phase 2 - SoC Integration](docs/phase2_soc_integration.md)
-- [Memory Map](docs/memory_map.md)
-
-## Repository Layout
+## Repository Structure
 
 ```text
 rtl/
-  core/        RV32I CPU, ECC memory, TMR blocks
-  bus/         AXI4-Lite crossbar and null slave
-  peripheral/ AXI4-Lite memory, UART, timer/WDT, health monitor
-  debug/       Debug Module, program buffer, DMI CDC bridge
-  dtm/         Debug Transport Module
-  jtag/        JTAG TAP controller
-  package/     shared SystemVerilog packages
-  system/      SoC top level
+  core/         CPU, ECC memory, TMR blocks
+  bus/          AXI4-Lite crossbar and null slave
+  peripheral/   UART, timer/WDT, health monitor, memory slaves
+  debug/        debug module, program buffer, CDC bridge
+  dtm/          JTAG debug transport module
+  jtag/         TAP FSM
+  system/       SoC top level
+  package/      shared SystemVerilog packages
 
-tb/
-  core/        CPU and fault-injection tests
-  bus/         AXI4-Lite bus/peripheral tests
-  peripheral/ UART, timer, health monitor tests
-  debug/       Debug module tests
-  dtm/         JTAG/DTM tests
-  system/      integration tests
-
-sim/
-  src/         C ISS baseline and space-hardened models
-  tests/       ISS hex programs
-  results/     analysis outputs
-
-docs/          concise project documentation
+tb/             SystemVerilog testbenches
+sim/            C ISS models and simulation results
+sw/             small firmware examples
+fpga/           constraints and FPGA scripts
+docs/           design notes
+synth/          synthesis scripts/outputs
 ```
 
-## Running Tests
+## Useful Commands
 
-Prerequisites:
-
-- Verilator
-- Make
-- C/C++ compiler
-
-Run RTL testbenches from `tb/`:
-
-```sh
-cd tb
-make run tb=tb_axi4_lite_mem_slave
-make run tb=tb_axi4_lite_uart_slave
-make run tb=tb_axi4_lite_timer_slave
-make run tb=tb_axi4_lite_health_slave
-make run tb=tb_debug_module
-make run tb=tb_dtm_top
-```
-
-`tb_fault_inject` is the main Phase 1 resilience regression, but it currently
-needs an update while the CPU interface is being migrated to AXI4-Lite. See
-[Verification Status](docs/verification_status.md) for the current test state.
-
-List available testbenches:
+Run RTL tests:
 
 ```sh
 cd tb
 make list
+make run tb=tb_axi4_lite_uart_slave
 ```
 
-Run the C ISS from `sim/`:
+Run the C simulators:
 
 ```sh
 cd sim
 make
 ./sim_baseline tests/test_all.hex
-./sim_baseline --trace tests/test_all.hex
 ./sim_space tests/test_all.hex
 ```
 
-## Technical Focus
+Build the UART firmware example:
 
-This project is designed to show:
+```sh
+cd sw/uart_hello
+make
+```
 
-- hardware fault tolerance using ECC and TMR
-- debug architecture using JTAG, DTM, and a RISC-V-style Debug Module
-- clean memory-mapped SoC integration
-- practical verification through directed SystemVerilog testbenches
-- honest tracking of incomplete work, especially ISS-to-RTL co-simulation
+## TODO
+
+Near term:
+- finish ISS vs RTL cross-check
+- clean up fault injection validation
+- confirm health monitor counters with tests
+- connect/verify CPU interrupt path
+- document the memory map clearly
+
+Next phase:
+- add one DMA engine
+- add one FIR accelerator
+- compare CPU-only vs DMA + accelerator
+
+FPGA bring-up:
+- generate bitstream for Arty A7
+- check timing/resource reports
+- use ILA for UART, reset, AXI, and health signals
+
+Not planned:
+- branch prediction
+- out-of-order execution
+- multiple accelerators
+- PCIe or DDR controller work
