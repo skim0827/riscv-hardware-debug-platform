@@ -1,112 +1,62 @@
-# Phase 2 - SoC Integration
+# Phase 2: SoC Integration
 
-## Goal
+Goal: turn the hardened CPU tile into a small memory-mapped SoC.
 
-Phase 2 turns the hardened CPU tile into a small SoC. The CPU moves from local
-memory-style connections toward memory-mapped AXI4-Lite access, with real
-peripherals around it.
+Top level:
 
-The current top level is `rtl/system/soc_top.sv`.
+```text
+rtl/system/soc_top.sv
+```
 
-## System Shape
+## System Blocks
 
-The SoC contains:
-
-- RV32I CPU core
-- JTAG TAP, Debug Transport Module, DMI CDC bridge, and Debug Module
-- direct instruction-memory path
+- RV32I CPU
+- direct IMEM fetch path
 - AXI4-Lite data crossbar
-- data memory slave
-- UART transmit slave
+- DMEM slave
+- UART TX slave
 - timer/watchdog slave
 - health monitor slave
+- JTAG TAP, DTM, CDC bridge, and Debug Module
 
-The CPU has separate instruction and data interfaces. Instruction fetch goes
-directly to IMEM. Data accesses go through the AXI4-Lite crossbar.
+Instruction fetch goes directly to IMEM. Data accesses go through AXI4-Lite.
 
-## Why IMEM Bypasses the Crossbar
+## Bus Layout
 
-The CPU already has a dedicated instruction-fetch port. Keeping IMEM direct
-simplifies the crossbar and avoids mixing fetch traffic with data/peripheral
-traffic.
-
-The crossbar still has an IMEM address slot, but it is connected to a null slave.
-If software accidentally performs a data access to the instruction-memory region,
-the null slave returns a decode error instead of pretending the write succeeded.
-
-## AXI4-Lite Peripherals
-
-The data crossbar currently exposes these slaves:
+The data bus exposes:
 
 | Slave | Purpose |
 | --- | --- |
-| DMEM | Data memory with ECC telemetry |
-| UART | Memory-mapped transmit byte and busy status |
-| Timer/WDT | Timer interrupt, watchdog enable, watchdog kick, timeout |
-| Health | ECC/TMR counters, live status, interrupt status, interrupt mask |
-| Null IMEM slot | Decode-error response for invalid data access to IMEM |
+| DMEM | data memory with ECC telemetry |
+| UART | transmit byte and busy status |
+| Timer/WDT | timer IRQ and watchdog reset |
+| Health | ECC/TMR counters and fault status |
+| Null IMEM slot | returns decode error for invalid data access |
 
-The AXI4-Lite slaves are intentionally small. Each one accepts independent write
-address and write data handshakes, returns simple OKAY responses for implemented
-registers, and exposes a compact register map.
+The IMEM null slot exists because instruction memory is not meant to be written
+through the data bus.
 
 ## Health Monitor
 
-The health monitor is the bridge between Phase 1 hardening and Phase 2 system
-visibility. It counts:
+The health monitor counts:
 
-- IMEM/DMEM ECC correction events
-- IMEM/DMEM ECC detection events
-- TMR PC disagreements
-- TMR FSM disagreements
-- TMR register-file disagreements
-- TMR instruction/control-path disagreements
+- IMEM/DMEM ECC corrections
+- IMEM/DMEM ECC detections
+- PC TMR disagreements
+- FSM TMR disagreements
+- register-file TMR disagreements
+- instruction-register TMR disagreements
 
-It also provides:
+It also provides live status, latched IRQ status, IRQ mask, and counter clear.
 
-- a live status register showing current fault wires
-- latched interrupt status bits
-- interrupt mask register
-- write-one-to-clear interrupt status
-- counter clear control
+## Watchdog
 
-ECC telemetry comes directly from the memory slaves. TMR telemetry comes from the
-CPU. The CPU does not need to sit in the middle of ECC reporting once memories
-are SoC-level blocks.
+The watchdog reset only resets the CPU. The debug path stays alive so the system
+can still be inspected after a watchdog event.
 
-## Watchdog Reset Decision
+## Current Gaps
 
-The watchdog reset only resets the CPU. It does not reset the JTAG/debug stack.
-
-This is intentional: after a watchdog event, the debugger should still be able
-to inspect the system and understand why the CPU reset. A full-chip reset would
-make debug visibility worse.
-
-## Interrupt Status
-
-`timer_irq` and `health_irq` are produced by their peripherals and exported from
-`soc_top`. They are not yet connected into the CPU as architectural interrupts.
-
-That means the peripherals can be tested and observed now, while CPU interrupt
-handling remains future work.
-
-## Current Phase 2 Status
-
-Implemented or partially implemented:
-
-- AXI4-Lite memory slave
-- AXI4-Lite UART slave
-- AXI4-Lite timer/watchdog slave
-- AXI4-Lite health monitor slave
-- AXI4-Lite crossbar integration in `soc_top.sv`
-- memory map constants in `rtl/package/axi4_lite_pkg.sv`
-
-Still in progress:
-
-- complete top-level SoC simulation signoff
 - CPU interrupt connection
+- full top-level SoC simulation signoff
 - DMA register block
-- full firmware-style peripheral access test
-
-The important design boundary is that Phase 2 is about system integration, not
-adding more CPU features.
+- firmware-style peripheral tests

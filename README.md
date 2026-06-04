@@ -106,6 +106,10 @@ cd sw/uart_hello
 make
 ```
 
+## Documentation
+
+Short design notes are in [docs/README.md](docs/README.md).
+
 ## TODO
 
 Near term:
