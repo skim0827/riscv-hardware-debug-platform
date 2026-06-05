@@ -99,11 +99,11 @@ make
 ./sim_space tests/test_all.hex
 ```
 
-Build the UART firmware example:
+Run the UART testbench:
 
 ```sh
 cd sw/uart_hello
-make
+make -C tb tb=tb_hello_fpga
 ```
 
 ## Documentation
