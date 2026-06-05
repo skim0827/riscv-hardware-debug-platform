@@ -69,6 +69,40 @@ RTL_AXI_HEALTH = \
 	../rtl/peripheral/health_monitor.sv \
 	../rtl/peripheral/axi4_lite_health_slave.sv
 
+# Full SoC for system-level testbenches.
+# Uses memory_ecc.sv (pure-SV arrays) instead of memory.sv (Vivado BRAM IP).
+RTL_SOC_FULL = \
+	$(RTL_PKGS) \
+	../rtl/core/alu.sv \
+	../rtl/core/alu_decoder.sv \
+	../rtl/core/instr_decoder.sv \
+	../rtl/core/signext.sv \
+	../rtl/core/program_counter.sv \
+	../rtl/core/regfile.sv \
+	system/bram_sp_39x128.sv \
+	../rtl/core/memory.sv \
+	../rtl/core/tmr_pc.sv \
+	../rtl/core/tmr_regfile.sv \
+	../rtl/core/main_fsm.sv \
+	../rtl/core/tmr_main_fsm.sv \
+	../rtl/core/control.sv \
+	../rtl/core/cpu_top.sv \
+	../rtl/jtag/tap_fsm.sv \
+	../rtl/dtm/dtm_top.sv \
+	../rtl/debug/dmi_cdc_bridge.sv \
+	../rtl/debug/progbuf.sv \
+	../rtl/debug/debug_module.sv \
+	../rtl/bus/axi4_lite_crossbar.sv \
+	../rtl/bus/axi4_lite_null_slave.sv \
+	../rtl/peripheral/axi4_lite_mem_slave.sv \
+	../rtl/peripheral/uart_tx.sv \
+	../rtl/peripheral/axi4_lite_uart_slave.sv \
+	../rtl/peripheral/timer_wdt.sv \
+	../rtl/peripheral/axi4_lite_timer_slave.sv \
+	../rtl/peripheral/health_monitor.sv \
+	../rtl/peripheral/axi4_lite_health_slave.sv \
+	../rtl/system/soc_top.sv
+
 TB_SRCS_tb_fault_inject          = ../rtl/package/riscv_pkg.sv $(RTL_CORE)
 TB_SRCS_tb_axi4_lite_mem_slave   = $(RTL_AXI_MEM)
 TB_SRCS_tb_axi4_lite_uart_slave  = $(RTL_AXI_UART)
@@ -80,6 +114,7 @@ TB_SRCS_tb_progbuf               = ../rtl/debug/progbuf.sv
 TB_SRCS_tb_dtm_top               = $(RTL_DTM)
 TB_SRCS_tb_system_top            = $(RTL_SYSTEM)
 TB_SRCS_tb_soc_top               = $(RTL_SYSTEM) ../rtl/system/soc_top.sv
+TB_SRCS_tb_hello_fpga            = $(RTL_SOC_FULL)
 
 RTL_SRCS = $(or $(TB_SRCS_$(tb)),$(RTL_CORE))
 
