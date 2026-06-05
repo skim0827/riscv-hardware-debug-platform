@@ -7,6 +7,7 @@
 .global _start
 
 _start:
+    nop                        # addr 0: CPU skips the first fetch on reset; this is the sacrifice slot
     li   a0, 0x20000000     # UART TX_DATA address
     la   a1, msg            # pointer to message
     li   a2, 13             # message length
@@ -28,6 +29,6 @@ poll:
 done:
     j    done               # halt
 
-.section .rodata
+.section .data
 msg:
     .byte 'H','e','l','l','o',' ','F','P','G','A','!',13,10
