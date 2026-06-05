@@ -67,13 +67,16 @@ assign bram_din    = {ecc_encode(merged_wd), merged_wd};
 assign rdata_bram  = bram_dout[31:0];
 assign recc_bram   = bram_dout[38:32];
 
-// Vivado single-port BRAM IP.
-bram_sp_39x128 u_bram (
+// Vivado single-port BRAM IP
+// Vivado ignores the MEM_INIT parameter during synthesis; init is done via IP config.
+bram_sp_39x128 #(
+    .MEM_INIT(mem_init)
+) u_bram (
     .clka  (clk),
     .wea   (we),
     .addra (addr), // 7 bit
     .dina  (bram_din), // 39 bit
-    .douta (bram_dout) // 39 bit 
+    .douta (bram_dout) // 39 bit
 );
 
 // ECC decoding

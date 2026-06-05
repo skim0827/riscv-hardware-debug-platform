@@ -244,7 +244,10 @@ always_ff @(posedge clk or negedge rst_n) begin
     end else begin
         case (ifetch_state)
             IFETCH_IDLE: begin
-                if (in_fetch_r) ifetch_state <= IFETCH_AR;
+                if (in_fetch_r) begin
+                    if (imem_arready) ifetch_state <= IFETCH_R;  // handshake in same cycle
+                    else              ifetch_state <= IFETCH_AR; // wait for arready
+                end
             end
             IFETCH_AR: begin
                 if (imem_arready) ifetch_state <= IFETCH_R;

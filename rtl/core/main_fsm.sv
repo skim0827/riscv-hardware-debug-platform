@@ -30,7 +30,7 @@ import riscv_pkg::*;
 
     // Fetch handshake with registered fetch trigger.
     input  logic fetch_done,
-    output logic in_fetch_r
+    output logic in_fetch_r // registered "I am in S_FETCH"
 );
 
 state_t state, next_state;
@@ -100,7 +100,7 @@ always_comb begin
             ALUSrcB   = 2'b10;  // 4
             ForceAdd  = 1'b1;
             ResultSrc = 2'b10;
-            PCUpdate  = 1'b1;
+            PCUpdate  = fetch_done; // advance PC only when instruction is available
             next_state = fetch_done ? S_DECODE : S_FETCH;
         end
 
