@@ -99,6 +99,13 @@ make
 ./sim_space tests/test_all.hex
 ```
 
+Run the ISS ↔ RTL cross-check:
+
+```sh
+cd tb
+make crosscheck
+```
+
 Run the UART testbench:
 
 ```sh
@@ -113,8 +120,8 @@ Short design notes are in [docs/README.md](docs/README.md).
 ## TODO
 
 Near term:
-- finish ISS vs RTL cross-check
-- clean up fault injection validation
+- ~~finish ISS vs RTL cross-check~~ (done — `make crosscheck`)
+- ~~clean up fault injection validation~~ (done)
 - confirm health monitor counters with tests
 - connect/verify CPU interrupt path
 - document the memory map clearly
@@ -125,9 +132,9 @@ Next phase:
 - compare CPU-only vs DMA + accelerator
 
 FPGA bring-up (ongoing): 
-- generate bitstream for Arty A7
+- ~~generate bitstream for Arty A7~~ (done — "Hello FPGA" printing over UART)
 - check timing/resource reports
-- use ILA for UART, reset, AXI, and health signals
+- ~~use ILA for UART, reset, AXI, and health signals~~ (done)
 
 Not planned:
 - branch prediction
