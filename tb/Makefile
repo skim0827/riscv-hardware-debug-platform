@@ -104,7 +104,13 @@ RTL_SOC_FULL = \
 	../rtl/peripheral/axi4_lite_health_slave.sv \
 	../rtl/system/soc_top.sv
 
-TB_SRCS_tb_fault_inject          = ../rtl/package/riscv_pkg.sv $(RTL_CORE)
+TB_SRCS_tb_fault_inject          = \
+    ../rtl/package/riscv_pkg.sv \
+    ../rtl/package/axi4_lite_pkg.sv \
+    $(RTL_CORE) \
+    ../rtl/peripheral/axi4_lite_mem_slave.sv \
+    system/bram_sp_39x128.sv \
+    system/bram_sp_39x128_dmem.sv
 TB_SRCS_tb_axi4_lite_mem_slave   = $(RTL_AXI_MEM)
 TB_SRCS_tb_axi4_lite_uart_slave  = $(RTL_AXI_UART)
 TB_SRCS_tb_axi4_lite_timer_slave = $(RTL_AXI_TIMER)
