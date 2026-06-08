@@ -104,6 +104,13 @@ RTL_SOC_FULL = \
 	../rtl/peripheral/axi4_lite_health_slave.sv \
 	../rtl/system/soc_top.sv
 
+TB_SRCS_tb_iss_check             = \
+    ../rtl/package/riscv_pkg.sv \
+    ../rtl/package/axi4_lite_pkg.sv \
+    $(RTL_CORE) \
+    ../rtl/peripheral/axi4_lite_mem_slave.sv \
+    system/bram_sp_39x128.sv \
+    system/bram_sp_39x128_dmem.sv
 TB_SRCS_tb_fault_inject          = \
     ../rtl/package/riscv_pkg.sv \
     ../rtl/package/axi4_lite_pkg.sv \
@@ -125,8 +132,13 @@ TB_SRCS_tb_hello_fpga            = $(RTL_SOC_FULL)
 
 RTL_SRCS = $(or $(TB_SRCS_$(tb)),$(RTL_CORE))
 
+ISS        ?= ../sim/sim_baseline
+CROSSCHECK ?= ../sw/crosscheck/crosscheck.hex
+ISS_TRACE  ?= /tmp/iss.trace
+RTL_TRACE  ?= /tmp/rtl.trace
+
 .DEFAULT_GOAL := run
-.PHONY: run core list clean check-tb
+.PHONY: run core list clean check-tb crosscheck
 
 run: check-tb
 	$(VERILATOR) $(VERILATOR_FLAGS) $(RTL_SRCS) $(TB_FILE) --top-module $(tb) -o sim_$(tb)
@@ -144,6 +156,14 @@ check-tb:
 		printf '  %s\n' $(AVAILABLE_TBS); \
 		exit 1; \
 	}
+
+crosscheck:
+	@echo "=== Step 1: ISS trace ==="
+	$(ISS) --trace --max 5 $(CROSSCHECK) > $(ISS_TRACE)
+	@echo "=== Step 2: RTL trace ==="
+	$(MAKE) tb=tb_iss_check 2>&1 | grep "^RTL" > $(RTL_TRACE)
+	@echo "=== Step 3: Compare ==="
+	python3 ../scripts/compare_trace.py $(ISS_TRACE) $(RTL_TRACE)
 
 clean:
 	rm -rf obj_dir *.vcd coverage.dat coverage.txt
