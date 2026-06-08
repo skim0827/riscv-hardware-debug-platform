@@ -386,7 +386,8 @@ axi4_lite_mem_slave #(
 // SLV_DMEM (slot 1): DMEM slave.
 axi4_lite_mem_slave #(
     .WORDS   (128),
-    .MEM_INIT("/home/sonia/riscv-hardware-debug-platform/sw/uart_hello/uart_hello_dmem.memh")
+    .MEM_INIT("/home/sonia/riscv-hardware-debug-platform/sw/uart_hello/uart_hello_dmem.memh"),
+    .IS_DMEM (1)
 ) u_dmem (
     .clk      (clk),
     .rst_n    (rst_n),

@@ -3,7 +3,8 @@
 
 module axi4_lite_mem_slave #(
     parameter WORDS    = 128,
-    parameter MEM_INIT = ""
+    parameter MEM_INIT = "",
+    parameter IS_DMEM  = 0
 )(
     input logic clk,
     input logic rst_n,
@@ -179,7 +180,8 @@ assign mem_we     = (wr_state == WR_EXEC);
 assign mem_funct3 = (wr_state == WR_EXEC) ? wstrb_to_funct3(wstrb_r) : 3'b010;
 memory #(
     .WORDS   (WORDS),
-    .mem_init(MEM_INIT)
+    .mem_init(MEM_INIT),
+    .IS_DMEM (IS_DMEM)
 ) u_mem (
     .clk      (clk),
     .rst_n    (rst_n),

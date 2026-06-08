@@ -3,7 +3,8 @@
 // Uses Vivado bram_sp_39x128 IP: 39 bits by 128 entries.
 module memory #(
     parameter WORDS    = 128,
-    parameter mem_init = ""
+    parameter mem_init = "",
+    parameter IS_DMEM  = 0    // 1 → instantiates bram_sp_39x128_d (separate Vivado IP with DMEM COE)
 )(
     input  logic        clk,
     input  logic        rst_n,
@@ -67,17 +68,28 @@ assign bram_din    = {ecc_encode(merged_wd), merged_wd};
 assign rdata_bram  = bram_dout[31:0];
 assign recc_bram   = bram_dout[38:32];
 
-// Vivado single-port BRAM IP
-// Vivado ignores the MEM_INIT parameter during synthesis; init is done via IP config.
-bram_sp_39x128 #(
-    .MEM_INIT(mem_init)
-) u_bram (
-    .clka  (clk),
-    .wea   (we),
-    .addra (addr), // 7 bit
-    .dina  (bram_din), // 39 bit
-    .douta (bram_dout) // 39 bit
-);
+// Vivado single-port BRAM IP.
+// IS_DMEM selects which IP to instantiate so each gets its own COE init file.
+// MEM_INIT is sim-only; the real Vivado IPs have no such parameter.
+generate
+  if (IS_DMEM) begin : gen_bram
+    `ifdef SIMULATION
+    bram_sp_39x128_dmem #(.MEM_INIT(mem_init)) u_bram (
+    `else
+    bram_sp_39x128_dmem u_bram (
+    `endif
+        .clka(clk), .wea(we), .addra(addr), .dina(bram_din), .douta(bram_dout)
+    );
+  end else begin : gen_bram
+    `ifdef SIMULATION
+    bram_sp_39x128 #(.MEM_INIT(mem_init)) u_bram (
+    `else
+    bram_sp_39x128 u_bram (
+    `endif
+        .clka(clk), .wea(we), .addra(addr), .dina(bram_din), .douta(bram_dout)
+    );
+  end
+endgenerate
 
 // ECC decoding
 logic [31:0] corrected_data;

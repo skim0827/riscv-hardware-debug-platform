@@ -1,7 +1,7 @@
 VERILATOR ?= verilator
 tb        ?= $(if $(TB),$(TB),tb_fault_inject)
 
-VERILATOR_FLAGS ?= --binary --sv --timing --trace -Wno-TIMESCALEMOD
+VERILATOR_FLAGS ?= --binary --sv --timing --trace -Wno-TIMESCALEMOD +define+SIMULATION
 
 TB_DIRS = . core bus peripheral debug dtm system
 TB_FILE = $(firstword $(foreach dir,$(TB_DIRS),$(wildcard $(dir)/$(tb).sv)))
@@ -80,6 +80,7 @@ RTL_SOC_FULL = \
 	../rtl/core/program_counter.sv \
 	../rtl/core/regfile.sv \
 	system/bram_sp_39x128.sv \
+	system/bram_sp_39x128_dmem.sv \
 	../rtl/core/memory.sv \
 	../rtl/core/tmr_pc.sv \
 	../rtl/core/tmr_regfile.sv \
