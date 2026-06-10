@@ -10,6 +10,8 @@ package axi4_lite_pkg;
     localparam [31:0] UART_BASE   = 32'h2000_0000;
     localparam [31:0] TIMER_BASE  = 32'h2000_1000;
     localparam [31:0] HEALTH_BASE = 32'h2000_2000;
+    localparam [31:0] DMA_BASE = 32'h2000_3000;
+    localparam [31:0] FIR_BASE = 32'h2000_4000;
 
     // Decode masks
     localparam [31:0] REGION_MASK = 32'hF000_0000; // keeps only the top 4 bits of an address.
