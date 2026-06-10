@@ -55,8 +55,20 @@ Covered cases:
 - register-file replica corruption
 - FSM replica corruption
 
-## Still To Do
+## ISS ↔ RTL Cross-Check
 
-- finish ISS vs RTL trace comparison
-- clean up fault campaign reporting
-- keep Phase 1 focused; do not add more CPU features
+A C ISS (`sim/sim_baseline`) is used as a golden reference. Both the ISS and
+RTL simulation run the same 5-instruction program and produce a PC + instruction
+word trace. The traces are diffed automatically.
+
+Run:
+
+```sh
+cd tb
+make crosscheck
+```
+
+All 5 instructions matched (PASS). This confirms the RTL fetch and decode path
+produces the same instruction sequence as the ISS for the tested program.
+
+

@@ -20,5 +20,4 @@ Future work:
 
 - DMA
 - one FIR accelerator
-- FPGA timing/resource reports
 - simple benchmark results
