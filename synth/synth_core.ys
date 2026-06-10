@@ -1,4 +1,0 @@
-read_verilog system_flat.v
-synth -top cpu -flatten
-stat
-write_verilog -noattr synth_core_out.v
