@@ -17,13 +17,14 @@ package axi4_lite_pkg;
     localparam [31:0] REGION_MASK = 32'hF000_0000; // keeps only the top 4 bits of an address.
     localparam [31:0] PAGE_MASK   = 32'hFFFF_F000; // big memory region
 
-    localparam int NUM_SLAVES = 5;
+    localparam int NUM_SLAVES = 6;
 
     localparam int SLV_IMEM   = 0;
     localparam int SLV_DMEM   = 1;
     localparam int SLV_UART   = 2;
     localparam int SLV_TIMER  = 3;
     localparam int SLV_HEALTH = 4;
+    localparam int SLV_FIR = 5;
 
     // UART (base: UART_BASE)
     localparam [11:0] UART_TX_DATA = 12'h000; // W: write byte to transmit
@@ -49,7 +50,11 @@ package axi4_lite_pkg;
     localparam [11:0] HEALTH_IRQ_STATUS    = 12'h020; // R/W1C: which events have fired
     localparam [11:0] HEALTH_CTRL          = 12'h024; // W: bit[0]=clear all counters
 
-
+    // FIR reg
+    localparam [11:0] FIR_DATA_IN = 12'h000;
+    localparam [11:0] FIR_DATA_OUT = 12'h004;
+    localparam [11:0] FIR_STATUS = 12'h008;
+    localparam [11:0] FIR_CTRL = 12'h00C;
 
 
 

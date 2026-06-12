@@ -73,6 +73,7 @@ function automatic int decode_addr(input logic [31:0] addr);
     else if ((addr & PAGE_MASK)   == UART_BASE)   return SLV_UART;
     else if ((addr & PAGE_MASK)   == TIMER_BASE)  return SLV_TIMER;
     else if ((addr & PAGE_MASK)   == HEALTH_BASE) return SLV_HEALTH;
+    else if ((addr & PAGE_MASK) == FIR_BASE)      return SLV_FIR;
     else                                           return NUM_SLAVES; // no match
 endfunction
 

@@ -461,4 +461,16 @@ axi4_lite_health_slave u_health (
     .health_irq     (health_irq)
 );
 
+axi4_lite_fir_slave u_fir (
+    .clk      (clk),
+    .rst_n    (rst_n),
+    .s_awaddr (s_awaddr [SLV_FIR]), .s_awvalid(s_awvalid[SLV_FIR]), .s_awready(s_awready[SLV_FIR]),
+    .s_wdata  (s_wdata  [SLV_FIR]), .s_wstrb  (s_wstrb  [SLV_FIR]),
+    .s_wvalid (s_wvalid [SLV_FIR]), .s_wready (s_wready [SLV_FIR]),
+    .s_bresp  (s_bresp  [SLV_FIR]), .s_bvalid (s_bvalid [SLV_FIR]), .s_bready(s_bready[SLV_FIR]),
+    .s_araddr (s_araddr [SLV_FIR]), .s_arvalid(s_arvalid[SLV_FIR]), .s_arready(s_arready[SLV_FIR]),
+    .s_rdata  (s_rdata  [SLV_FIR]), .s_rresp  (s_rresp  [SLV_FIR]),
+    .s_rvalid (s_rvalid [SLV_FIR]), .s_rready (s_rready [SLV_FIR])
+);
+
 endmodule : soc_top
