@@ -36,7 +36,7 @@ always_ff @(posedge clk or negedge rst_n) begin
 end
 
 logic signed [31:0] products [0:TAPS-1]; // Each tap:  product[i] = h[i] * x[n-i]   (32-bit signed)
-logic signed [31:0] acc; // Sum
+logic signed [32:0] acc; // Sum
 
 assign products[0] = COEFF_0 * shift_reg[0];
 assign products[1] = COEFF_1 * shift_reg[1];
@@ -47,15 +47,18 @@ assign products[5] = COEFF_5 * shift_reg[5];
 assign products[6] = COEFF_6 * shift_reg[6];
 assign products[7] = COEFF_7 * shift_reg[7];
 
-logic signed [31:0] sum_l1 [0:3];
-logic signed [31:0] sum_l2 [0:1];
-assign sum_l1[0] = products[0] + products[1];
-assign sum_l1[1] = products[2] + products[3];
-assign sum_l1[2] = products[4] + products[5];
-assign sum_l1[3] = products[6] + products[7];
+logic signed [32:0] sum_l1 [0:3];
+logic signed [32:0] sum_l2 [0:1];
+assign sum_l1[0] = {products[0][31], products[0]} + {products[1][31], products[1]};
+assign sum_l1[1] = {products[2][31], products[2]} + {products[3][31], products[3]};
+assign sum_l1[2] = {products[4][31], products[4]} + {products[5][31], products[5]};
+assign sum_l1[3] = {products[6][31], products[6]} + {products[7][31], products[7]};
+ 
 assign sum_l2[0] = sum_l1[0] + sum_l1[1];
 assign sum_l2[1] = sum_l1[2] + sum_l1[3];
+ 
 assign acc = sum_l2[0] + sum_l2[1];
+
 
 // output reg
 /*

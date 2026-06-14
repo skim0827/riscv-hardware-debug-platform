@@ -64,6 +64,7 @@ fir_filter u_fir (
 // Output reg
 logic signed [15:0] out_reg;
 logic               out_valid;
+logic               rd_clear_out_valid;  // 1-cycle pulse from read FSM
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         out_reg   <= '0;
@@ -72,10 +73,9 @@ always_ff @(posedge clk or negedge rst_n) begin
         if (fir_valid_out) begin
             out_reg   <= fir_data_out;
             out_valid <= 1'b1;
-        end
-        // DATA_OUT (0x004)
-        if (rd_exec && (ar_addr_r[11:0] == 12'h004))
+        end else if (rd_clear_out_valid) begin
             out_valid <= 1'b0;
+        end
     end
 end
 
@@ -91,7 +91,9 @@ logic [11:0] aw_addr_r; // latched aw addr
 logic [31:0] wd_r;
 logic        aw_recv;
 logic        w_recv;
+logic        fir_busy; 
 
+assign fir_busy = (wr_state == WR_EXEC);
 
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -106,20 +108,7 @@ always_ff @(posedge clk or negedge rst_n) begin
     end else begin
         fir_valid_in <= 1'b0;
         ctrl_srst    <= 1'b0;
-        case (wr_state)
-            WR_IDLE: begin
-                if (s_awvalid && s_awready) begin
-                    aw_addr_r <= s_awaddr[11:0];
-                    aw_recv   <= 1'b1;
-                end
-                if (s_wvalid && s_wready) begin
-                    wd_r    <= s_wdata;
-                    w_recv  <= 1'b1;
-                end
-                if ((aw_recv || (s_awvalid && s_awready)) &&
-                    (w_recv  || (s_wvalid  && s_wready)))
-                    wr_state <= WR_EXEC;
-            end
+
         case (wr_state)
             WR_IDLE: begin
                 if (s_awvalid && s_awready) begin
@@ -176,15 +165,16 @@ typedef enum logic [1:0] {
 rd_state_t   rd_state;
 logic [11:0] ar_addr_r;
 logic [31:0] rdata_r;
-logic        rd_exec; // 1 cycle high when read data is computed
+
 
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         rd_state  <= RD_IDLE;
         ar_addr_r <= '0;
         rdata_r   <= '0;
+        rd_clear_out_valid <= 1'b0;
     end else begin
-        rd_exec <= 1'b0;
+        rd_clear_out_valid <= 1'b0;
         case (rd_state)
             RD_IDLE: begin
                 if (s_arvalid && s_arready) begin
@@ -194,14 +184,19 @@ always_ff @(posedge clk or negedge rst_n) begin
             end
 
             RD_LATCH: begin
-                rd_exec  <= 1'b1;
                 rd_state <= RD_RESP;
                 case (ar_addr_r)
-                    12'h004: rdata_r <= {15'b0, out_valid, out_reg};   // DATA_OUT
-                    12'h008: rdata_r <= {30'b0, fir_valid_in, out_valid}; // STATUS
+                    FIR_DATA_OUT: begin
+                        rdata_r            <= {15'b0, out_valid, out_reg};
+                        rd_clear_out_valid <= 1'b1;   // clear flag on read
+                    end
+                    FIR_STATUS: begin
+                        rdata_r <= {30'b0, fir_busy, out_valid};
+                    end
                     default: rdata_r <= 32'hDEAD_BEEF;
                 endcase
             end
+
 
             RD_RESP: begin
                 if (s_rready) rd_state <= RD_IDLE;
