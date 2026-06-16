@@ -72,3 +72,6 @@ All 5 instructions matched (PASS). This confirms the RTL fetch and decode path
 produces the same instruction sequence as the ISS for the tested program.
 
 
+## TODO 
+- RV32I changed to RV32M
+- need to modify the works in phase 1 
