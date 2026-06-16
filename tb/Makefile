@@ -3,7 +3,7 @@ tb        ?= $(if $(TB),$(TB),tb_fault_inject)
 
 VERILATOR_FLAGS ?= --binary --sv --timing --trace -Wno-TIMESCALEMOD +define+SIMULATION
 
-TB_DIRS = . core bus peripheral debug dtm system
+TB_DIRS = . core bus peripheral debug dtm system accel
 TB_FILE = $(firstword $(foreach dir,$(TB_DIRS),$(wildcard $(dir)/$(tb).sv)))
 AVAILABLE_TBS = $(sort $(basename $(notdir $(wildcard tb_*.sv */tb_*.sv))))
 
@@ -69,6 +69,11 @@ RTL_AXI_HEALTH = \
 	../rtl/peripheral/health_monitor.sv \
 	../rtl/peripheral/axi4_lite_health_slave.sv
 
+RTL_AXI_FIR = \
+	../rtl/package/axi4_lite_pkg.sv \
+	../rtl/accel/fir_filter.sv \
+	../rtl/peripheral/axi4_lite_fir_slave.sv
+
 # Full SoC for system-level testbenches.
 # Uses memory_ecc.sv (pure-SV arrays) instead of memory.sv (Vivado BRAM IP).
 RTL_SOC_FULL = \
@@ -122,6 +127,7 @@ TB_SRCS_tb_axi4_lite_mem_slave   = $(RTL_AXI_MEM)
 TB_SRCS_tb_axi4_lite_uart_slave  = $(RTL_AXI_UART)
 TB_SRCS_tb_axi4_lite_timer_slave = $(RTL_AXI_TIMER)
 TB_SRCS_tb_axi4_lite_health_slave = $(RTL_AXI_HEALTH)
+TB_SRCS_tb_fir                    = $(RTL_AXI_FIR)
 TB_SRCS_tb_debug_module          = $(RTL_DEBUG)
 TB_SRCS_tb_cdc_cmd_bridge        = ../rtl/debug/dmi_cdc_bridge.sv
 TB_SRCS_tb_progbuf               = ../rtl/debug/progbuf.sv
