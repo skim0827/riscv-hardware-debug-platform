@@ -1,37 +1,38 @@
-# Produces fir_benchmark.hex (raw 32-bit instruction words) for loading
-
 TARGET   = fir_benchmark
-CC       = riscv32-unknown-elf-gcc
-OBJCOPY  = riscv32-unknown-elf-objcopy
-OBJDUMP  = riscv32-unknown-elf-objdump
+XVITIS   = /opt/Xilinx/2025.1/Vitis/gnu/riscv/lin/riscv64-unknown-elf/bin
+CC       = $(XVITIS)/riscv64-unknown-elf-gcc
+AS       = $(XVITIS)/riscv64-unknown-elf-gcc
+LD       = $(XVITIS)/riscv64-unknown-elf-gcc
+OBJCOPY  = $(XVITIS)/riscv64-unknown-elf-objcopy
+OBJDUMP  = $(XVITIS)/riscv64-unknown-elf-objdump
 
+ARCH_FLAGS = -march=rv32im -mabi=ilp32
+CFLAGS     = $(ARCH_FLAGS) -O2 -nostdlib -nostartfiles -ffreestanding \
+             -fno-builtin -Wall -Wextra
+LDFLAGS    = $(ARCH_FLAGS) -nostdlib -T link.ld
 
-# Match Arty A7 IMEM: 128 words × 4 bytes = 512 bytes
-LDSCRIPT = ../uart_hello/link.ld
+SRCS_C = fir_benchmark.c
+SRCS_S = start.S
+OBJS   = start.o fir_benchmark.o
 
+all: $(TARGET)_words.memh $(TARGET).dump
 
-CFLAGS = -march=rv32i -mabi=ilp32 -O2 -nostdlib -nostartfiles \
-         -fno-builtin -Wall -Wextra
+start.o: start.S
+	$(AS) $(ARCH_FLAGS) -c -o $@ $<
 
+fir_benchmark.o: fir_benchmark.c
+	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(TARGET).elf: $(OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
 
-SRCS = fir_benchmark.c ../uart_hello/start.S
- 
-all: $(TARGET).hex $(TARGET).dump
- 
-$(TARGET).elf: $(SRCS) $(LDSCRIPT)
-	$(CC) $(CFLAGS) -T$(LDSCRIPT) -o $@ $(SRCS)
- 
-$(TARGET).hex: $(TARGET).elf
-	$(OBJCOPY) -O verilog $< $@
- 
-# Flat 32-bit word file for $readmemh (same format as uart_hello_words.memh)
+# Flat word file for $readmemh
 $(TARGET)_words.memh: $(TARGET).elf
-	$(OBJCOPY) -O binary $< $(TARGET).bin
-	python3 bin2memh.py $(TARGET).bin $(TARGET)_words.memh
- 
+	$(OBJCOPY) -O binary --only-section=.text $< $(TARGET)_imem.bin
+	python3 bin2memh.py $(TARGET)_imem.bin $(TARGET)_words.memh
+
 $(TARGET).dump: $(TARGET).elf
 	$(OBJDUMP) -d $< > $@
- 
+
 clean:
-	rm -f *.elf *.hex *.bin *.memh *.dump
+	rm -f *.o *.elf *.bin *.memh *.dump

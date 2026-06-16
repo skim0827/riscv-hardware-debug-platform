@@ -10,7 +10,7 @@
 #define TIMER_COUNT     (*(volatile uint32_t*)(TIMER_BASE + 0x004))
 #define TIMER_TIMEOUT   (*(volatile uint32_t*)(TIMER_BASE + 0x008))
 
-#define FIR_BASE        0x20003000
+#define FIR_BASE        0x20004000
 #define FIR_DATA_IN     (*(volatile uint32_t*)(FIR_BASE + 0x000))
 #define FIR_DATA_OUT    (*(volatile uint32_t*)(FIR_BASE + 0x004))
 #define FIR_STATUS      (*(volatile uint32_t*)(FIR_BASE + 0x008))
@@ -143,7 +143,7 @@ int main(void) {
 
     make_test_signal(input, N); // Generate test data
 
-    // ---- CPU benchmark ----
+
     timer_start();
     fir_cpu(input, out_cpu, N);
     cycles_cpu = timer_stop();
@@ -152,7 +152,7 @@ int main(void) {
     uart_putu32(cycles_cpu);
     uart_puts("\r\n");
 
-    // ---- HW benchmark ----
+
     timer_start();
     fir_hw(input, out_hw, N);
     cycles_hw = timer_stop();
@@ -163,7 +163,6 @@ int main(void) {
 
     // ---- Speedup ----
     uart_puts("Speedup   ~");
-    // integer division: cycles_cpu / cycles_hw
     if (cycles_hw > 0) {
         uart_putu32(cycles_cpu / cycles_hw);
         uart_puts(".");
@@ -173,7 +172,6 @@ int main(void) {
         uart_puts("inf\r\n");
     }
 
-    // ---- Correctness check ----
     uart_puts("Correctness check...\r\n");
     int mismatches = check_outputs(out_cpu, out_hw, N);
     if (mismatches == 0)
