@@ -8,6 +8,7 @@ import riscv_pkg::*;
     input  opcode_t op, 
     input  logic [2:0] funct3,
     input  logic funct7_5,
+    input  logic funct7_0,
 
     output logic RegWrite, 
     output logic MemWrite,
@@ -77,6 +78,7 @@ alu_decoder u_alu(
     .opcode(op),
     .funct3(funct3),
     .funct7_5(funct7_5),
+    .funct7_0(funct7_0),
     .ForceAdd(ForceAdd),
     .ALUControl_out(ALUControl)
 );

@@ -1,13 +1,14 @@
 `timescale 1ns/1ps
-module alu_decoder 
+module alu_decoder
 import riscv_pkg::*;
 (
-    input logic [6:0] opcode, 
-    input logic [2:0] funct3, 
+    input logic [6:0] opcode,
+    input logic [2:0] funct3,
     input logic funct7_5,
+    input logic funct7_0,   // RVM: funct7=0000001 → bit[0]=1
     input logic ForceAdd,
 
-    output alu_control_t ALUControl_out 
+    output alu_control_t ALUControl_out
 );
 
 
@@ -38,35 +39,39 @@ always_comb begin
 
         7'd35 : ALUControl = ALU_ADD; // STORES 
 
-        7'd51 : begin // R-TYPE
-            case (funct3)
-                3'b000: begin
-                    if (funct7_5)
-                        ALUControl = ALU_SUB;
-                    else
-                        ALUControl = ALU_ADD;
-                end
-
-                3'b001: ALUControl = ALU_SLL;
-                3'b010: ALUControl = ALU_SLT;
-                3'b011: ALUControl = ALU_SLTU;
-                3'b100: ALUControl = ALU_XOR;
-
-                3'b101: begin
-                    if (funct7_5)
-                        ALUControl = ALU_SRA;
-                    else
-                        ALUControl = ALU_SRL;
-                end
-
-                3'b110: ALUControl = ALU_OR;
-                3'b111: ALUControl = ALU_AND;
-
-                default: ALUControl = ALU_ADD;
-            endcase 
-            
-                
-        end 
+        7'd51 : begin // R-TYPE (RV32I funct7=0000000/0100000, RVM funct7=0000001)
+            if (funct7_0) begin // RVM: Table B.5
+                case (funct3)
+                    3'b000: ALUControl = ALU_MUL;
+                    3'b001: ALUControl = ALU_MULH;
+                    3'b010: ALUControl = ALU_MULHSU;
+                    3'b011: ALUControl = ALU_MULHU;
+                    3'b100: ALUControl = ALU_DIV;
+                    3'b101: ALUControl = ALU_DIVU;
+                    3'b110: ALUControl = ALU_REM;
+                    3'b111: ALUControl = ALU_REMU;
+                    default: ALUControl = ALU_ADD;
+                endcase
+            end else begin // RV32I
+                case (funct3)
+                    3'b000: begin
+                        if (funct7_5) ALUControl = ALU_SUB;
+                        else          ALUControl = ALU_ADD;
+                    end
+                    3'b001: ALUControl = ALU_SLL;
+                    3'b010: ALUControl = ALU_SLT;
+                    3'b011: ALUControl = ALU_SLTU;
+                    3'b100: ALUControl = ALU_XOR;
+                    3'b101: begin
+                        if (funct7_5) ALUControl = ALU_SRA;
+                        else          ALUControl = ALU_SRL;
+                    end
+                    3'b110: ALUControl = ALU_OR;
+                    3'b111: ALUControl = ALU_AND;
+                    default: ALUControl = ALU_ADD;
+                endcase
+            end
+        end
         7'd99 : begin // BRANCH 
             case (funct3[2:1]) 
                 2'b00 : ALUControl = ALU_SUB;  // BEQ, BNE

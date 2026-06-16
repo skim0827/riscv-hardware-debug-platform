@@ -75,10 +75,12 @@ logic [31:0] instruction;
 logic [6:0] op;
 logic [2:0] funct3;
 logic funct7_5;
+logic funct7_0;
 
 assign op               = instruction[6:0];
 assign funct3           = instruction[14:12];
 assign funct7_5         = instruction[30];
+assign funct7_0         = instruction[25];
 assign _unused_hart_reset_req = hart_reset_req;
 
 // datapath wires 
@@ -356,6 +358,7 @@ control u_control(
     .op(op),
     .funct3(funct3),
     .funct7_5(funct7_5),
+    .funct7_0(funct7_0),
 
     .RegWrite(RegWrite),
     .MemWrite(MemWrite),

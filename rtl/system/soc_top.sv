@@ -358,7 +358,7 @@ axi4_lite_null_slave u_null (
 
 // Direct IMEM slave for instruction fetch.
 axi4_lite_mem_slave #(
-    .WORDS   (128),
+    .WORDS   (512),
     .MEM_INIT("/home/sonia/riscv-hardware-debug-platform/sw/uart_hello/uart_hello_words.memh")
 ) u_imem (
     .clk      (clk),
@@ -385,7 +385,7 @@ axi4_lite_mem_slave #(
 
 // SLV_DMEM (slot 1): DMEM slave.
 axi4_lite_mem_slave #(
-    .WORDS   (128),
+    .WORDS   (512),
     .MEM_INIT("/home/sonia/riscv-hardware-debug-platform/sw/uart_hello/uart_hello_dmem.memh"),
     .IS_DMEM (1)
 ) u_dmem (

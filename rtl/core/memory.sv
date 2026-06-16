@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
 // BRAM-backed memory with SECDED ECC.
-// Uses Vivado bram_sp_39x128 IP: 39 bits by 128 entries.
+// Uses Vivado bram_sp_39x512 IP: 39 bits by 512 entries.
 module memory #(
-    parameter WORDS    = 128,
+    parameter WORDS    = 512,
     parameter mem_init = "",
     parameter IS_DMEM  = 0    // 1 → instantiates bram_sp_39x128_d (separate Vivado IP with DMEM COE)
 )(
@@ -39,9 +39,9 @@ logic [6:0]  recc_bram;
 logic [31:0] merged_wd;
 logic [38:0] bram_din;
 logic [38:0] bram_dout;
-logic [6:0]  addr;
+logic [8:0]  addr;
 
-assign addr = a[8:2];
+assign addr = a[10:2];
 
 always_comb begin
 // Partial writes use the previous BRAM read data during bring-up.
@@ -74,17 +74,17 @@ assign recc_bram   = bram_dout[38:32];
 generate
   if (IS_DMEM) begin : gen_bram
     `ifdef SIMULATION
-    bram_sp_39x128_dmem #(.MEM_INIT(mem_init)) u_bram (
+    bram_sp_39x512_dmem #(.MEM_INIT(mem_init)) u_bram (
     `else
-    bram_sp_39x128_dmem u_bram (
+    bram_sp_39x512_dmem u_bram (
     `endif
         .clka(clk), .wea(we), .addra(addr), .dina(bram_din), .douta(bram_dout)
     );
   end else begin : gen_bram
     `ifdef SIMULATION
-    bram_sp_39x128 #(.MEM_INIT(mem_init)) u_bram (
+    bram_sp_39x512 #(.MEM_INIT(mem_init)) u_bram (
     `else
-    bram_sp_39x128 u_bram (
+    bram_sp_39x512 u_bram (
     `endif
         .clka(clk), .wea(we), .addra(addr), .dina(bram_din), .douta(bram_dout)
     );
@@ -94,7 +94,7 @@ endgenerate
 // ECC decoding
 logic [31:0] corrected_data;
 logic _unused;
-assign _unused = rst_n | |a[31:9];
+assign _unused = rst_n | |a[31:11];
 
 always_comb begin : ecc_decode
     logic [5:0] h, syndrome;
@@ -129,7 +129,7 @@ end
 
 // Read path with funct3 sign/zero extension.
 // a[1:0] byte offset (ignored for word access)
-// a[8:2] word index.
+// a[10:2] word index.
 always_comb begin 
     case(funct3)
         3'b000 : begin // LB

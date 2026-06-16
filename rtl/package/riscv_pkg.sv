@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 package riscv_pkg;
     // page 407 
-    typedef enum logic [3:0] {
+    typedef enum logic [4:0] {
         ALU_ADD,
         ALU_SUB,
         ALU_AND,
@@ -11,7 +11,16 @@ package riscv_pkg;
         ALU_SLTU,
         ALU_SLL,
         ALU_SRL,
-        ALU_SRA
+        ALU_SRA,
+        // RVM (Table B.5): funct7=0000001, opcode=0110011
+        ALU_MUL,     // funct3=000  rd = (rs1*rs2)[31:0]  signed×signed
+        ALU_MULH,    // funct3=001  rd = (rs1*rs2)[63:32] signed×signed
+        ALU_MULHSU,  // funct3=010  rd = (rs1*rs2)[63:32] signed×unsigned
+        ALU_MULHU,   // funct3=011  rd = (rs1*rs2)[63:32] unsigned×unsigned
+        ALU_DIV,     // funct3=100  rd = rs1/rs2  (signed)
+        ALU_DIVU,    // funct3=101  rd = rs1/rs2  (unsigned)
+        ALU_REM,     // funct3=110  rd = rs1%rs2  (signed)
+        ALU_REMU     // funct3=111  rd = rs1%rs2  (unsigned)
     }alu_control_t;
 
     typedef enum logic [3:0] {
