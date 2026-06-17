@@ -1,10 +1,9 @@
 `timescale 1ns/1ps
-// Top-level SoC integration.
 // IMEM is direct; data access goes through the AXI4-Lite crossbar.
 
 module soc_top (
     input  logic clk,
-    input logic rst_btn,      // active HIGH from button
+    input logic rst_btn, // active HIGH from button
 
     // JTAG debug port
     // input  logic tck,
@@ -12,7 +11,7 @@ module soc_top (
     // input  logic tdi,
     // output logic tdo,
 
-    // UART TX
+
     output logic uart_tx,
 
     // Fault telemetry outputs.
@@ -27,12 +26,14 @@ module soc_top (
 
     // Pending IRQ outputs.
     output logic timer_irq_o,
-    output logic health_irq_o
+    output logic health_irq_o,
+    output logic dma_irq_o
 );
 
 import dmi_pkg::*;
 import riscv_pkg::*;
 import axi4_lite_pkg::*;
+
 // JTAG pins are tied off for this build.
 
 logic tck, tms, tdi, tdo;
@@ -117,12 +118,14 @@ logic cpu_rst_n;
 
 assign cpu_rst_n = rst_n & ~wdt_reset;
 
-// IRQ wires for future CPU interrupt support.
+// IRQ wires
 logic timer_irq;
 logic health_irq;
+logic dma_irq;
 
 assign timer_irq_o = timer_irq;
 assign health_irq_o = health_irq;
+assign dma_irq_o   = dma_irq;
 
 // CPU AXI4-Lite master ports.
 
@@ -139,12 +142,19 @@ logic        imem_wready_unused;
 logic [1:0]  imem_bresp_unused;
 logic        imem_bvalid_unused;
 
-// Data bus (crossbar master)
+// Data bus — CPU (M0)
 logic [31:0] cpu_m_awaddr;  logic cpu_m_awvalid; logic cpu_m_awready;
 logic [31:0] cpu_m_wdata;   logic [3:0] cpu_m_wstrb; logic cpu_m_wvalid; logic cpu_m_wready;
 logic [1:0]  cpu_m_bresp;   logic cpu_m_bvalid;  logic cpu_m_bready;
 logic [31:0] cpu_m_araddr;  logic cpu_m_arvalid; logic cpu_m_arready;
 logic [31:0] cpu_m_rdata;   logic [1:0] cpu_m_rresp; logic cpu_m_rvalid; logic cpu_m_rready;
+
+// Data bus — DMA (M1)
+logic [31:0] dma_m_awaddr;  logic dma_m_awvalid; logic dma_m_awready;
+logic [31:0] dma_m_wdata;   logic [3:0] dma_m_wstrb; logic dma_m_wvalid; logic dma_m_wready;
+logic [1:0]  dma_m_bresp;   logic dma_m_bvalid;  logic dma_m_bready;
+logic [31:0] dma_m_araddr;  logic dma_m_arvalid; logic dma_m_arready;
+logic [31:0] dma_m_rdata;   logic [1:0] dma_m_rresp; logic dma_m_rvalid; logic dma_m_rready;
 
 // AXI4-Lite crossbar slave port arrays
 logic [31:0] s_awaddr  [NUM_SLAVES];
@@ -223,7 +233,7 @@ dmi_cdc_bridge u_cdc (
     .clk_dmi_rdata(clk_dmi_rdata)
 );
 
-// Debug module in clk domain.
+// Debug module (clk domain)
 debug_module u_dm (
     .clk               (clk),
     .rst_n             (rst_n),
@@ -309,31 +319,30 @@ cpu u_cpu (
     .m_rready          (cpu_m_rready)
 );
 
-// AXI4-Lite crossbar: CPU data bus to peripheral slots.
+// AXI4-Lite crossbar: 2 masters (CPU + DMA), 7 slaves.
 axi4_lite_crossbar u_crossbar (
-    .clk      (clk),
-    .rst_n    (rst_n),
+    .clk       (clk),
+    .rst_n     (rst_n),
 
-    // Master port: CPU data bus.
-    .m_awaddr (cpu_m_awaddr),
-    .m_awvalid(cpu_m_awvalid),
-    .m_awready(cpu_m_awready),
-    .m_wdata  (cpu_m_wdata),
-    .m_wstrb  (cpu_m_wstrb),
-    .m_wvalid (cpu_m_wvalid),
-    .m_wready (cpu_m_wready),
-    .m_bresp  (cpu_m_bresp),
-    .m_bvalid (cpu_m_bvalid),
-    .m_bready (cpu_m_bready),
-    .m_araddr (cpu_m_araddr),
-    .m_arvalid(cpu_m_arvalid),
-    .m_arready(cpu_m_arready),
-    .m_rdata  (cpu_m_rdata),
-    .m_rresp  (cpu_m_rresp),
-    .m_rvalid (cpu_m_rvalid),
-    .m_rready (cpu_m_rready),
+    // M0: CPU data bus
+    .m0_awaddr (cpu_m_awaddr),  .m0_awvalid(cpu_m_awvalid), .m0_awready(cpu_m_awready),
+    .m0_wdata  (cpu_m_wdata),   .m0_wstrb  (cpu_m_wstrb),
+    .m0_wvalid (cpu_m_wvalid),  .m0_wready (cpu_m_wready),
+    .m0_bresp  (cpu_m_bresp),   .m0_bvalid (cpu_m_bvalid),  .m0_bready (cpu_m_bready),
+    .m0_araddr (cpu_m_araddr),  .m0_arvalid(cpu_m_arvalid), .m0_arready(cpu_m_arready),
+    .m0_rdata  (cpu_m_rdata),   .m0_rresp  (cpu_m_rresp),
+    .m0_rvalid (cpu_m_rvalid),  .m0_rready (cpu_m_rready),
 
-    // Slave port arrays.
+    // M1: DMA master
+    .m1_awaddr (dma_m_awaddr),  .m1_awvalid(dma_m_awvalid), .m1_awready(dma_m_awready),
+    .m1_wdata  (dma_m_wdata),   .m1_wstrb  (dma_m_wstrb),
+    .m1_wvalid (dma_m_wvalid),  .m1_wready (dma_m_wready),
+    .m1_bresp  (dma_m_bresp),   .m1_bvalid (dma_m_bvalid),  .m1_bready (dma_m_bready),
+    .m1_araddr (dma_m_araddr),  .m1_arvalid(dma_m_arvalid), .m1_arready(dma_m_arready),
+    .m1_rdata  (dma_m_rdata),   .m1_rresp  (dma_m_rresp),
+    .m1_rvalid (dma_m_rvalid),  .m1_rready (dma_m_rready),
+
+    // Slave port arrays
     .s_awaddr (s_awaddr),   .s_awvalid(s_awvalid), .s_awready(s_awready),
     .s_wdata  (s_wdata),    .s_wstrb  (s_wstrb),
     .s_wvalid (s_wvalid),   .s_wready (s_wready),
@@ -461,6 +470,7 @@ axi4_lite_health_slave u_health (
     .health_irq     (health_irq)
 );
 
+// SLV_FIR (slot 5): FIR accelerator slave.
 axi4_lite_fir_slave u_fir (
     .clk      (clk),
     .rst_n    (rst_n),
@@ -471,6 +481,32 @@ axi4_lite_fir_slave u_fir (
     .s_araddr (s_araddr [SLV_FIR]), .s_arvalid(s_arvalid[SLV_FIR]), .s_arready(s_arready[SLV_FIR]),
     .s_rdata  (s_rdata  [SLV_FIR]), .s_rresp  (s_rresp  [SLV_FIR]),
     .s_rvalid (s_rvalid [SLV_FIR]), .s_rready (s_rready [SLV_FIR])
+);
+
+// SLV_DMA (slot 6) DMA controller slave for CPU config, master for data movement.
+dma_ctrl u_dma (
+    .clk      (clk),
+    .rst_n    (rst_n),
+
+    // Slave: CPU programs DMA registers via crossbar
+    .s_awaddr (s_awaddr [SLV_DMA]), .s_awvalid(s_awvalid[SLV_DMA]), .s_awready(s_awready[SLV_DMA]),
+    .s_wdata  (s_wdata  [SLV_DMA]), .s_wstrb  (s_wstrb  [SLV_DMA]),
+    .s_wvalid (s_wvalid [SLV_DMA]), .s_wready (s_wready [SLV_DMA]),
+    .s_bresp  (s_bresp  [SLV_DMA]), .s_bvalid (s_bvalid [SLV_DMA]), .s_bready(s_bready[SLV_DMA]),
+    .s_araddr (s_araddr [SLV_DMA]), .s_arvalid(s_arvalid[SLV_DMA]), .s_arready(s_arready[SLV_DMA]),
+    .s_rdata  (s_rdata  [SLV_DMA]), .s_rresp  (s_rresp  [SLV_DMA]),
+    .s_rvalid (s_rvalid [SLV_DMA]), .s_rready (s_rready [SLV_DMA]),
+
+    // Master: DMA drives crossbar M1 port independently
+    .m_awaddr (dma_m_awaddr),  .m_awvalid(dma_m_awvalid), .m_awready(dma_m_awready),
+    .m_wdata  (dma_m_wdata),   .m_wstrb  (dma_m_wstrb),
+    .m_wvalid (dma_m_wvalid),  .m_wready (dma_m_wready),
+    .m_bresp  (dma_m_bresp),   .m_bvalid (dma_m_bvalid),  .m_bready (dma_m_bready),
+    .m_araddr (dma_m_araddr),  .m_arvalid(dma_m_arvalid), .m_arready(dma_m_arready),
+    .m_rdata  (dma_m_rdata),   .m_rresp  (dma_m_rresp),
+    .m_rvalid (dma_m_rvalid),  .m_rready (dma_m_rready),
+
+    .dma_irq  (dma_irq)
 );
 
 endmodule : soc_top
