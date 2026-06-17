@@ -11,6 +11,8 @@ Constants are defined in `rtl/package/axi4_lite_pkg.sv`.
 | UART | `0x2000_0000` | UART transmit peripheral |
 | Timer/WDT | `0x2000_1000` | timer and watchdog |
 | Health | `0x2000_2000` | fault telemetry block |
+| DMA | `0x2000_3000` | DMA controller (CPU config slave) |
+| FIR | `0x2000_4000` | FIR accelerator |
 
 ## UART Registers
 
@@ -61,3 +63,29 @@ Base: `0x2000_2000`
 | 5 | FSM TMR disagreement |
 | 6 | register-file TMR disagreement |
 | 7 | instruction-register TMR disagreement |
+
+## DMA Controller Registers
+
+Base: `0x2000_3000`
+
+| Offset | Name | Access | Description |
+| ---: | --- | --- | --- |
+| `0x00` | `SRC_ADDR` | R/W | Source base address in DMEM |
+| `0x04` | `DST_ADDR` | R/W | Destination base address in DMEM |
+| `0x08` | `LEN` | R/W | Number of 32-bit words to transfer |
+| `0x0C` | `CTRL` | R/W | `[0]` start (SC), `[1]` irq_en |
+| `0x10` | `STATUS` | R/W1C | `[0]` busy, `[1]` done (W1C), `[2]` error (W1C) |
+
+**SC** = self-clearing: hardware clears `CTRL[0]` immediately after transfer starts.  
+**W1C**: write 1 to clear; used by the interrupt handler to acknowledge completion.
+
+## FIR Accelerator Registers
+
+Base: `0x2000_4000`
+
+| Offset | Name | Access | Description |
+| ---: | --- | --- | --- |
+| `0x000` | `DATA_IN` | W | Write sample to push into FIR |
+| `0x004` | `DATA_OUT` | R | bit[16] = valid flag, bits[15:0] = result |
+| `0x008` | `STATUS` | R | bit[1] = busy, bit[0] = output valid |
+| `0x00C` | `CTRL` | W | bit[0] = soft reset |
