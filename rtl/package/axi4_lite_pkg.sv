@@ -17,14 +17,15 @@ package axi4_lite_pkg;
     localparam [31:0] REGION_MASK = 32'hF000_0000; // keeps only the top 4 bits of an address.
     localparam [31:0] PAGE_MASK   = 32'hFFFF_F000; // big memory region
 
-    localparam int NUM_SLAVES = 6;
+    localparam int NUM_SLAVES = 7;
 
     localparam int SLV_IMEM   = 0;
     localparam int SLV_DMEM   = 1;
     localparam int SLV_UART   = 2;
     localparam int SLV_TIMER  = 3;
     localparam int SLV_HEALTH = 4;
-    localparam int SLV_FIR = 5;
+    localparam int SLV_FIR    = 5;
+    localparam int SLV_DMA    = 6;
 
     // UART (base: UART_BASE)
     localparam [11:0] UART_TX_DATA = 12'h000; // W: write byte to transmit
