@@ -1,143 +1,93 @@
-# Space Grade RISCV Soc
+# RISC-V Hardware Debug Platform
 
-This project is a small FPGA SoC prototype for fault-tolerant onboard data
-processing. The current focus is a simple RV32I CPU with ECC/TMR protection,
-AXI4-Lite peripherals, debug access, and basic telemetry.
+A fault-tolerant RV32M SoC prototype targeting FPGA (Arty A7). The focus is resilience, observability, and hardware acceleration — not CPU complexity.
 
-The goal is not to build a complex CPU. The goal is to build a resilient SoC
-platform that can be tested, measured, and eventually run on FPGA hardware.
+## Status
 
-## Current Status
-
-Phase 1 and Phase 2 are mostly implemented.
-
-Phase 1: hardened compute tile
-- RV32I multicycle CPU
-- ECC-protected instruction/data memory
-- TMR on PC, register file, instruction register, and control FSM
-- fault injection testbench work
-- C ISS models for baseline and space-hardened behavior
-
-Phase 2: SoC integration
-- AXI4-Lite crossbar
-- IMEM and DMEM slaves
-- UART TX slave
-- Timer/watchdog slave
-- Health monitor slave
-- JTAG/DTM/Debug Module path
-- top-level SoC integration for Arty A7 bring-up
+| Phase | Description | Status |
+| --- | --- | --- |
+| 1 | Hardened compute tile | Done |
+| 2 | SoC integration + FPGA bring-up | Done |
+| 3 | DMA + FIR accelerator | In progress |
 
 ## Architecture
 
-```text
-                    +----------------------+
-                    |    RISC-V CPU        |
-                    | + Debug Module       |
-                    +----------+-----------+
-                               |
-                         AXI4-Lite Bus
-                               |
- +-------------+--------------+---------------+---------------+
- |             |              |               |               |
-IMEM(ECC)   DMEM(ECC)      UART        Timer/WDT      Health Monitor
-                                                                  |
-                                                     Telemetry Counters
-                                                                  |
-                                                            Interrupts
-                                                                  |
-                                                          DMA Controller
-                                                                  |
-                                                          AXI Stream
-                                                                  |
-                                                     +------------+
-                                                     |
-                                                FIR Accelerator
-                                                     |
-                                                Results → DMEM
+```
+CPU (RV32I + Debug Module)
+│
+└── AXI4-Lite Crossbar (2 masters: CPU, DMA)
+      ├── IMEM (ECC)          0x0000_0000
+      ├── DMEM (ECC)          0x1000_0000
+      ├── UART TX             0x2000_0000
+      ├── Timer / WDT         0x2000_1000
+      ├── Health Monitor      0x2000_2000
+      ├── DMA Controller      0x2000_3000
+      └── FIR Accelerator     0x2000_4000
 ```
 
-The CPU fetches instructions directly from IMEM. Data accesses go through the
-AXI4-Lite bus. Fault signals are collected by the health monitor.
+## TODO
 
-## Repository Structure
+Phase 1 — hardened compute:
+- ~~RV32I multicycle CPU~~
+- ~~ECC on IMEM and DMEM~~
+- ~~TMR on PC, register file, instruction register, control FSM~~
+- ~~fault injection testbench~~
+- ~~ISS vs RTL cross-check~~ (`make crosscheck`)
 
-```text
+Phase 2 — SoC integration:
+- ~~AXI4-Lite crossbar, IMEM/DMEM slaves~~
+- ~~UART, Timer/watchdog, Health Monitor peripherals~~
+- ~~JTAG → DTM → Debug Module path~~
+- ~~FPGA bring-up on Arty A7~~ (Hello UART printing, ILA captures done)
+- connect and verify CPU interrupt path
+
+Phase 3 — DMA + FIR accelerator:
+- ~~8-tap FIR filter RTL + AXI4-Lite slave~~
+- ~~DMA controller RTL + wired into soc_top~~
+- ~~crossbar expanded to 2 masters (CPU + DMA)~~
+- end-to-end integration testbench (`tb_fir_dma.sv`)
+- run benchmark: CPU-only FIR vs DMA + HW accelerator
+
+## Repository Layout
+
+```
 rtl/
   core/         CPU, ECC memory, TMR blocks
-  bus/          AXI4-Lite crossbar and null slave
-  peripheral/   UART, timer/WDT, health monitor, memory slaves
+  bus/          AXI4-Lite crossbar
+  peripheral/   UART, timer/WDT, health monitor, DMA controller, FIR slave
+  accel/        FIR filter RTL
   debug/        debug module, program buffer, CDC bridge
   dtm/          JTAG debug transport module
   jtag/         TAP FSM
   system/       SoC top level
-  package/      shared SystemVerilog packages
+  package/      shared packages
 
 tb/             SystemVerilog testbenches
-sim/            C ISS models and simulation results
-sw/             small firmware examples
-fpga/           constraints and FPGA scripts
-docs/           design notes
-synth/          synthesis scripts/outputs
+sim/            C ISS models
+sw/             firmware (uart_hello, fir_benchmark)
+fpga/           Arty A7 constraints and scripts
+docs/           design notes and memory map
 ```
 
-## Useful Commands
-
-Run RTL tests:
+## Commands
 
 ```sh
-cd tb
-make list
-make run tb=tb_axi4_lite_uart_slave
-```
+# run any RTL testbench
+cd tb && make tb=<name>
 
-Run the C simulators:
+# FIR accelerator testbench
+cd tb && make tb=tb_fir
 
-```sh
-cd sim
-make
-./sim_baseline tests/test_all.hex
-./sim_space tests/test_all.hex
-```
+# ISS vs RTL cross-check
+cd tb && make crosscheck
 
-Run the ISS ↔ RTL cross-check:
-
-```sh
-cd tb
-make crosscheck
-```
-
-Run the UART testbench:
-
-```sh
-cd sw/uart_hello
-make -C tb tb=tb_hello_fpga
+# C ISS models
+cd sim && make && ./sim_space tests/test_all.hex
 ```
 
 ## Documentation
 
-Short design notes are in [docs/README.md](docs/README.md).
-
-## TODO
-
-Near term:
-- ~~finish ISS vs RTL cross-check~~ (done — `make crosscheck`)
-- ~~clean up fault injection validation~~ (done)
-- confirm health monitor counters with tests
-- connect/verify CPU interrupt path
-- document the memory map clearly
-
-Next phase:
-- add one DMA engine
-- add one FIR accelerator
-- compare CPU-only vs DMA + accelerator
-
-FPGA bring-up (ongoing): 
-- ~~generate bitstream for Arty A7~~ (done — "Hello FPGA" printing over UART)
-- check timing/resource reports
-- ~~use ILA for UART, reset, AXI, and health signals~~ (done)
-
-Not planned:
-- branch prediction
-- out-of-order execution
-- multiple accelerators
-- PCIe or DDR controller work
+- [Phase 1](docs/phase1_hardened_compute_tile.md)
+- [Phase 2](docs/phase2_soc_integration.md)
+- [Phase 3](docs/phase3_dma_accelerator.md)
+- [Memory Map](docs/memory_map.md)
