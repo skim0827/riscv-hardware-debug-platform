@@ -34,18 +34,41 @@ The AXI slave exposes four registers:
 
 The DMA engine lets the CPU program a transfer and step aside.
 
-CPU programs:
-- source address (DMEM)
-- destination address (FIR slave or output buffer)
-- transfer size
+RTL: `rtl/peripheral/dma_ctrl.sv`
 
-DMA handles:
-- reading samples from DMEM
-- feeding `DATA_IN` on the FIR slave
-- writing results back to DMEM
-- asserting a completion interrupt to the CPU
+DMA has two AXI4-Lite interfaces:
+- **Slave** (`DMA_BASE = 0x2000_3000`): CPU configures registers
+- **Master**: DMA drives the bus independently to move data
 
-DMA registers live at `0x2000_3000`. RTL is in progress.
+### Register Map
+
+| Offset | Name | Access | Description |
+| ---: | --- | --- | --- |
+| `0x00` | `SRC_ADDR` | R/W | Source base address in DMEM |
+| `0x04` | `DST_ADDR` | R/W | Destination base address in DMEM |
+| `0x08` | `LEN` | R/W | Number of 32-bit words to transfer |
+| `0x0C` | `CTRL` | R/W | `[0]` = start (SC), `[1]` = irq_en |
+| `0x10` | `STATUS` | R | `[0]` = busy, `[1]` = done (W1C), `[2]` = error (W1C) |
+
+**SC** (self-clearing): writing 1 to `CTRL[0]` starts the transfer; hardware clears it immediately.  
+**W1C**: writing 1 to a STATUS bit clears it; used by the interrupt handler to acknowledge completion.
+
+### Transfer Sequence (per word)
+
+```
+DMEM[cur_src]  →  FIR DATA_IN  →  poll STATUS[out_valid]
+               →  FIR DATA_OUT  →  DMEM[cur_dst]
+```
+
+Repeats for `LEN` words. On completion, `STATUS[done]` is set and `dma_irq` is asserted (level) if `irq_en = 1`.  
+On any AXI bus error (`SLVERR` / `DECERR`), the engine halts and sets `STATUS[error]`.
+
+### Design Notes
+
+- Single-beat (non-burst) transfers — deterministic latency, no reordering
+- Interrupt is level-triggered: stays asserted until CPU clears `STATUS[1]` via W1C
+- `set > clear` priority: if transfer completes in the same cycle as a CPU W1C, `done` is not lost
+- FIR output is polled via STATUS rather than assumed ready, making the path correct regardless of FIR latency changes
 
 ## Benchmark
 
@@ -85,7 +108,7 @@ make tb=tb_fir
 
 ## Current Gaps
 
-- DMA RTL not yet written
-- DMA-fed accelerator path not tested end-to-end
-- benchmark numbers pending DMA integration (current HW path is CPU-polled, not DMA-driven)
-- interrupt wiring from DMA to CPU
+- Crossbar not yet expanded to 2 masters (CPU + DMA)
+- DMA not yet wired into `soc_top.sv`
+- End-to-end integration testbench (`tb_fir_dma.sv`) not yet written
+- Benchmark numbers pending full DMA integration
