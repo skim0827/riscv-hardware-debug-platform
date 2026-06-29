@@ -1,10 +1,3 @@
-// ============================================================================
-// TESTBENCH: RISC-V Debug Module v0.13.2
-// ============================================================================
-// Simple, clean, and COMPLETE testbench
-// Test Coverage: DMI, registers, hart control, commands, error handling
-// ============================================================================
-
 `timescale 1ns/1ps
 
 module tb_debug_module();
@@ -14,10 +7,6 @@ import riscv_pkg::*;
 
 localparam CLK_PERIOD = 10;      // 100MHz
 localparam RESET_CYCLES = 5;
-
-// ============================================================================
-// SIGNALS
-// ============================================================================
 
 logic clk, rst_n;
 
@@ -44,10 +33,8 @@ logic        progbuf_exec, progbuf_done, progbuf_exception;
 int pass_count = 0;
 int fail_count = 0;
 
-// ============================================================================
-// DUT
-// ============================================================================
 
+    
 debug_module dut (
     .clk                (clk),
     .rst_n              (rst_n),
@@ -74,10 +61,8 @@ debug_module dut (
     .progbuf_exception  (progbuf_exception)
 );
 
-// ============================================================================
-// CLOCK / RESET
-// ============================================================================
 
+    
 initial begin
     clk = 1'b0;
     forever #(CLK_PERIOD/2) clk = ~clk;
@@ -89,10 +74,7 @@ initial begin
     rst_n = 1'b1;
 end
 
-// ============================================================================
-// HELPER TASKS
-// ============================================================================
-
+    
 task automatic dmi_write(logic [6:0] addr, logic [31:0] data);
     @(posedge clk);
     dmi_addr  = addr;
@@ -381,9 +363,8 @@ task automatic test_write_read_flow();
     dmi_read(DMI_DATA0, read_value);
     check(read_value, write_value, "Read-back matches write value");
 endtask
-// ============================================================================
+
 // FUNCTIONAL COVERAGE
-// ============================================================================
  
 /* verilator lint_off COVERIGN */
 covergroup cg_dmi_operations;
@@ -444,11 +425,7 @@ initial begin
     progbuf_exception = 1'b0;
     
     $display("\n");
-    $display("╔════════════════════════════════════════╗");
-    $display("║   DEBUG MODULE TESTBENCH               ║");
-    $display("║   RISC-V v0.13.2 with Coverage        ║");
-    $display("╚════════════════════════════════════════╝");
-    
+
     wait_condition(rst_n, 100);
     repeat(10) @(posedge clk);
     
@@ -463,9 +440,6 @@ initial begin
     test_write_read_flow();
     
     $display("\n");
-    $display("╔════════════════════════════════════════╗");
-    $display("║            RESULTS                     ║");
-    $display("╚════════════════════════════════════════╝");
     $display("PASS: %0d", pass_count);
     $display("FAIL: %0d", fail_count);
     
